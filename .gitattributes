@@ -1,0 +1,15 @@
+# Normalise line endings so Windows and other systems agree
+* text=auto
+
+*.cpp text eol=lf
+*.h   text eol=lf
+*.txt text eol=lf
+*.md  text eol=lf
+*.sh  text eol=lf
+
+# Binary files
+*.png  binary
+*.jpg  binary
+*.ttf  binary
+*.docx binary
+*.pdf  binary
