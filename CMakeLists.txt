@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FloodRelief VERSION 0.1.0 LANGUAGES CXX)
+project(FloodRelief VERSION 0.1.0 LANGUAGES CXX)   #CXX is C++  
 
 # ---------------------------------------------------------------------------
 # Options

@@ -16,7 +16,7 @@ gh label create bug           --color DC2626 --description "Something is broken"
 gh label create enhancement   --color 2563EB --description "New feature or improvement"           --force
 
 echo "Creating milestones..."
-gh api "repos/{owner}/{repo}/milestones" -f title="v1.0 Course submission" -f due_on="2026-11-22T18:59:59Z" \
+gh api "repos/{owner}/{repo}/milestones" -f title="v1.0 Semester Project submission" -f due_on="2026-11-22T18:59:59Z" \
   -f description="Everything in the approved proposal plus the raylib GUI. Due Sun Nov 22 (PKT)." >/dev/null
 gh api "repos/{owner}/{repo}/milestones" -f title="v2.0 Later" \
   -f description="Inspector, smooth map, moving trucks and other upgrades." >/dev/null
