@@ -1,8 +1,8 @@
 // Tests for DynamicArray<T>. These are the "spec": make them all pass.
 #include <string>
 
-#include "test_framework.h"
 #include "core/dynamic_array.h"
+#include "test_framework.h"
 
 namespace {
 
@@ -156,6 +156,7 @@ void insertEmptyAndRemoveUntilEmpty() {
     CHECK_EQ(a.size(), 0u);
     CHECK_THROWS_AS(a.popBack(), std::out_of_range);
 }
+} // namespace ends
 
 void runDynamicArrayTests() {
     test::section("DynamicArray");

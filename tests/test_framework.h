@@ -52,7 +52,7 @@ inline int testSummary() {
     return failed == 0 ? 0 : 1;
 }
 
-}  // namespace test
+}  // namespace test end
 
 #define CHECK(cond) test::report(static_cast<bool>(cond), #cond, __FILE__, __LINE__)
 
