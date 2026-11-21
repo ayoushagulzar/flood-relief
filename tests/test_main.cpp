@@ -1,11 +1,21 @@
-// Entry point for all unit tests.
-// Day 2: add your CHECK macro and the first DynamicArray tests here,
-// or in separate files like tests/test_dynamic_array.cpp.
-// Return 0 if every test passes, non-zero otherwise (ctest uses this).
+// test_main.cpp - the only file with main() in the test program.
+#include "test_framework.h"
 
-#include <iostream>
+void runDynamicArrayTests();   // Phase 2
+// void runMinHeapTests();     // Phase 3
+// void runHashTableTests();   // Phase 3
+// void runGraphTests();       // Phase 4
+// void runDijkstraTests();    // Phase 4
+// void runReliefTests();      // Phase 5
+// void runLoaderTests();      // Phase 6
 
 int main() {
-    std::cout << "No tests yet.\n";
-    return 0;
+    runDynamicArrayTests();
+    // runMinHeapTests();
+    // runHashTableTests();
+    // runGraphTests();
+    // runDijkstraTests();
+    // runReliefTests();
+    // runLoaderTests();
+    return test::testSummary();
 }
