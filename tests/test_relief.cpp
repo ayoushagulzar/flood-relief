@@ -132,6 +132,46 @@ void partialAndDeferred() {
     CHECK_EQ(st.unmet[supplyIndex(Supply::Water)], 150);
 }
 
+// A partial request is retried, but no depot has more stock: the sentence
+// must say "nothing new this time" instead of an empty list (": ;").
+void partialRetryWithNothingNew() {
+    World w;
+    w.stock(w.depotB, Supply::Water, 450);
+    w.request("P", Supply::Water, 600, 3);
+    w.m.processNext();                         // 450 of 600 -> partial
+    w.m.reopenRoad(w.village, w.town);         // any world change retries deferred requests
+    Decision again = w.m.processNext();
+    CHECK(again.status == Status::PartiallyFulfilled);
+    CHECK(again.legs.isEmpty());
+    CHECK(contains(again.explanation, "got 450 of 600 water so far (nothing new this time)"));
+    CHECK(!contains(again.explanation, ": ;"));
+    // the retry event names the request that moved back into the queue
+    bool named = false;
+    const DynamicArray<Event>& ev = w.m.events();
+    for (std::size_t i = 0; i < ev.size(); ++i)
+        if (ev[i].type == EventType::Retry && contains(ev[i].text, "queued again after") && contains(ev[i].text, ": P"))
+            named = true;
+    CHECK(named);
+}
+
+// queueSnapshot() is the heap array: index 0 is the request processNext() takes.
+void queueSnapshotTopIsNext() {
+    World w;
+    w.stock(w.depotA, Supply::Water, 1000);
+    w.request("LOW", Supply::Water, 10, 1);
+    w.request("HIGH", Supply::Water, 10, 5);
+    w.request("MID", Supply::Water, 10, 3);
+    DynamicArray<int> q = w.m.queueSnapshot();
+    CHECK_EQ(q.size(), 3u);
+    CHECK(w.m.requests()[static_cast<std::size_t>(q[0])].id == "HIGH");
+    for (std::size_t i = 1; i < q.size(); ++i) {  // heap order: parent key >= child key
+        double parent = ReliefManager::heapKey(w.m.requests()[static_cast<std::size_t>(q[(i - 1) / 2])]);
+        CHECK(parent >= ReliefManager::heapKey(w.m.requests()[static_cast<std::size_t>(q[i])]));
+    }
+    CHECK(w.m.processNext().requestId == "HIGH");
+    CHECK_EQ(w.m.queueSnapshot().size(), 2u);
+}
+
 void blockChangesRouteReopenRetries() {
     World w;
     w.stock(w.depotA, Supply::Water, 100);
@@ -231,6 +271,8 @@ void runReliefTests() {
     test::runCase("nearestDepotFirstThenNext", nearestDepotFirstThenNext);
     test::runCase("skippedDepotReasons", skippedDepotReasons);
     test::runCase("partialAndDeferred", partialAndDeferred);
+    test::runCase("partialRetryWithNothingNew", partialRetryWithNothingNew);
+    test::runCase("queueSnapshotTopIsNext", queueSnapshotTopIsNext);
     test::runCase("blockChangesRouteReopenRetries", blockChangesRouteReopenRetries);
     test::runCase("addStockRetries", addStockRetries);
     test::runCase("clockAdvancesPerDecision", clockAdvancesPerDecision);

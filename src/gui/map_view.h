@@ -78,5 +78,6 @@ private:
     bool pressedInMap_ = false;
     bool dragging_ = false;
     bool clicked_ = false;
+    bool userMoved_ = false;  // zoomed or panned since the last reset?
     Vector2 pressPos_{0, 0};
 };

@@ -64,6 +64,11 @@ public:
     Stats stats() const;
     int now() const { return now_; }
     std::size_t deferredCount() const { return deferred_.size(); }
+    // The request heap exactly as stored (array order, index 0 = next to serve),
+    // as indices into requests(). O(n). For the CLI `queue` view.
+    DynamicArray<int> queueSnapshot() const;
+    // Indices of requests waiting for a retry (not in the heap).
+    const DynamicArray<int>& deferredList() const { return deferred_; }
 
     const Request* findRequest(const std::string& id) const;
     const Depot* findDepot(int nodeId) const;
