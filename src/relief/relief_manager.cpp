@@ -133,8 +133,11 @@ void ReliefManager::explain(Decision& d, const Request& r) {
         d.explanation = who + " served " + formatNumber(d.deliveredNow) + " " + sup + ": " + legsText + ".";
         log(EventType::Served, r.id + " served " + formatNumber(d.deliveredNow) + " " + sup + " (" + legsText + ")");
     } else if (r.status == Status::PartiallyFulfilled) {
+        // On a retry nothing new may arrive (no legs): then say so, instead of
+        // printing an empty list ("got 50 of 250 shelter: ; ...").
+        std::string now = d.legs.isEmpty() ? "nothing new this time" : legsText;
         d.explanation = who + " got " + formatNumber(r.delivered) + " of " + formatNumber(r.quantity) + " " + sup +
-                        ": " + legsText + "; " + formatNumber(r.remaining()) + " still needed, deferred for retry.";
+                        " so far (" + now + "); " + formatNumber(r.remaining()) + " still needed, deferred for retry.";
         log(EventType::Partial, r.id + " partly served, " + formatNumber(r.remaining()) + " " + sup + " still needed");
     } else {
         d.explanation = who + " deferred: no reachable depot has " + sup + ".";
@@ -255,9 +258,19 @@ int ReliefManager::processAll() {
 void ReliefManager::retryDeferred(const std::string& reason) {
     if (deferred_.isEmpty()) return;
     std::size_t n = deferred_.size();
-    for (std::size_t i = 0; i < n; ++i) pushToQueue(deferred_[i]);
+    std::string ids;  // which requests moved back, e.g. "R-17, R-14, R-24"
+    for (std::size_t i = 0; i < n; ++i) {
+        pushToQueue(deferred_[i]);
+        ids += (i ? ", " : "") + requests_[static_cast<std::size_t>(deferred_[i])].id;
+    }
     deferred_.clear();
-    log(EventType::Retry, std::to_string(n) + " deferred request(s) queued again after " + reason);
+    log(EventType::Retry, std::to_string(n) + " deferred request(s) queued again after " + reason + ": " + ids);
+}
+
+DynamicArray<int> ReliefManager::queueSnapshot() const {
+    DynamicArray<int> out;
+    for (std::size_t i = 0; i < queue_.size(); ++i) out.pushBack(queue_.at(i).index);
+    return out;
 }
 
 // ---------- world changes ----------

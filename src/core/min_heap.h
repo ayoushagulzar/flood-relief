@@ -61,6 +61,9 @@ public:
 
     // O(1)
     std::size_t size() const { return data_.size(); }
+    // Read-only look at array slot i (0 = top). Used by the CLI `queue`
+    // command to print the heap as it is stored. Throws if i is out of range.
+    const T& at(std::size_t i) const { return data_.at(i); }
     // O(1)
     bool isEmpty() const { return data_.isEmpty(); }
     // O(1)

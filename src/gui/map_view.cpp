@@ -133,7 +133,10 @@ void MapView::update(Rectangle mapRect, bool mouseOverUI) {
         resetView();
         initialised_ = true;
     } else if (resized) {
-        clampCamera();
+        // Window maximised/resized: if the user hasn't zoomed or panned yet,
+        // fit Pakistan to the new size; otherwise keep their view.
+        if (userMoved_) clampCamera();
+        else resetView();
     }
 
     clicked_ = false;
@@ -147,14 +150,23 @@ void MapView::update(Rectangle mapRect, bool mouseOverUI) {
     if (inMap && wheel != 0) {
         Vector2 before = GetScreenToWorld2D(mouse, cam_);
         cam_.zoom = clampf(cam_.zoom * std::pow(1.2f, wheel), minZoom, kMaxZoom);
+        userMoved_ = true;
         cam_.target = before;
         cam_.offset = mouse;
         clampCamera();
     }
-    if (IsKeyPressed(KEY_HOME)) resetView();
-    if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD)) cam_.zoom = clampf(cam_.zoom * 1.5f, minZoom, kMaxZoom);
-    if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT))
+    if (IsKeyPressed(KEY_HOME)) {
+        resetView();
+        userMoved_ = false;
+    }
+    if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD)) {
+        cam_.zoom = clampf(cam_.zoom * 1.5f, minZoom, kMaxZoom);
+        userMoved_ = true;
+    }
+    if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT)) {
         cam_.zoom = clampf(cam_.zoom / 1.5f, minZoom, kMaxZoom);
+        userMoved_ = true;
+    }
 
     // Drag to pan (left, right or middle button). A left press that never
     // moves more than 4 px is a CLICK instead (used for picking).
@@ -166,6 +178,7 @@ void MapView::update(Rectangle mapRect, bool mouseOverUI) {
     if (pressedInMap_ && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
         if (!dragging_ && length(sub(mouse, pressPos_)) > 4.0f) {
             dragging_ = true;
+            userMoved_ = true;
             cam_.target = sub(cam_.target, scale(sub(mouse, pressPos_), 1.0f / cam_.zoom));
         } else if (dragging_) {
             cam_.target = sub(cam_.target, scale(GetMouseDelta(), 1.0f / cam_.zoom));
@@ -177,6 +190,7 @@ void MapView::update(Rectangle mapRect, bool mouseOverUI) {
         dragging_ = false;
     }
     if (inMap && (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))) {
+        userMoved_ = true;
         cam_.target = sub(cam_.target, scale(GetMouseDelta(), 1.0f / cam_.zoom));
     }
     clampCamera();
