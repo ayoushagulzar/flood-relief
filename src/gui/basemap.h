@@ -32,7 +32,7 @@ public:
     Basemap(const Basemap&) = delete;
     Basemap& operator=(const Basemap&) = delete;
 
-    void init();    // after InitWindow(): loads the dark-map shader
+    void init();    // after InitWindow(): loads the pale-map shader
     void unload();  // before CloseWindow(): frees textures + shader
 
     // Call inside BeginMode2D(cam). mapRect is the map area on screen.
@@ -62,7 +62,7 @@ private:
     HashTable index_;
     DynamicArray<Tile> tiles_;
     net::TileDownloader downloader_;
-    Shader darkShader_{};
+    Shader fadeShader_{};
     bool shaderOk_ = false;
     int loadsThisFrame_ = 0;
     int loaded_ = 0;

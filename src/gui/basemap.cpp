@@ -11,21 +11,24 @@ constexpr int kMaxDownloadsPerFrame = 2;
 constexpr int kMaxLoadsPerFrame = 2;
 constexpr int kMaxPendingDownloads = 6;  // OSM policy: be gentle with their servers
 
-// OSM tiles are light. This shader turns them into a dark, grey map:
-// brightness = 1 - luminance, then scaled down. Water ends up a little
-// lighter than land, labels become light grey: perfect behind our graph.
-const char* kDarkFragment = R"(#version 330
+// OSM tiles are colourful. This shader turns them into a pale, almost
+// grey map so our burgundy roads and symbols stand out on top:
+//   1. mostly grey: mix the colour with its own brightness (luminance)
+//   2. lighter: mix the result with near-white by `fade`
+// Water stays a little darker than land, so the coast is still visible.
+const char* kFadeFragment = R"(#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
-uniform float darkness;
+uniform float fade;
 out vec4 finalColor;
 void main() {
     vec4 c = texture(texture0, fragTexCoord);
     float lum = dot(c.rgb, vec3(0.299, 0.587, 0.114));
-    float v = (1.0 - lum) * darkness;
-    finalColor = vec4(v, v, v * 1.04, c.a) * fragColor * colDiffuse;
+    vec3 grey = mix(c.rgb, vec3(lum), 0.8);
+    vec3 pale = mix(grey, vec3(1.0, 0.985, 0.985), fade);
+    finalColor = vec4(pale, c.a) * fragColor * colDiffuse;
 }
 )";
 
@@ -36,11 +39,11 @@ Basemap::Basemap() : index_(256), downloader_("FloodRelief/1.0 (DSA student proj
 Basemap::~Basemap() = default;
 
 void Basemap::init() {
-    darkShader_ = LoadShaderFromMemory(nullptr, kDarkFragment);
-    shaderOk_ = IsShaderValid(darkShader_);
+    fadeShader_ = LoadShaderFromMemory(nullptr, kFadeFragment);
+    shaderOk_ = IsShaderValid(fadeShader_);
     if (shaderOk_) {
-        float d = theme::kTileDarkness;
-        SetShaderValue(darkShader_, GetShaderLocation(darkShader_, "darkness"), &d, SHADER_UNIFORM_FLOAT);
+        float f = theme::kTileFade;
+        SetShaderValue(fadeShader_, GetShaderLocation(fadeShader_, "fade"), &f, SHADER_UNIFORM_FLOAT);
     }
 }
 
@@ -50,7 +53,7 @@ void Basemap::unload() {
     }
     tiles_.clear();
     index_.clear();
-    if (shaderOk_) UnloadShader(darkShader_);
+    if (shaderOk_) UnloadShader(fadeShader_);
     shaderOk_ = false;
     loaded_ = 0;
 }
@@ -156,7 +159,7 @@ void Basemap::draw(const Camera2D& cam, Rectangle mapRect) {
     if (x1 > n - 1) x1 = n - 1;
     if (y1 > n - 1) y1 = n - 1;
 
-    if (shaderOk_) BeginShaderMode(darkShader_);
+    if (shaderOk_) BeginShaderMode(fadeShader_);
     int downloadsLeft = kMaxDownloadsPerFrame;
     // Centre tiles first, so the part you look at arrives first.
     int cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
