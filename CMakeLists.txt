@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FloodRelief VERSION 0.1.0 LANGUAGES CXX)   #CXX is C++  
+project(FloodRelief VERSION 0.1.0 LANGUAGES CXX)   #CXX is C++
 
 # ---------------------------------------------------------------------------
 # Options
@@ -11,6 +11,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)   # helps VS Code IntelliSense
+
+# MinGW: put the C++ runtime (libstdc++, libgcc, winpthread) INSIDE each .exe.
+# Without this the .exe loads libstdc++-6.dll from the first folder on PATH;
+# in Git Bash that is Git's own older copy (/mingw64/bin), and the optimised
+# (Release) build crashed with "Segmentation fault". Static linking also lets
+# the release .exe files run on a PC without MSYS2.
+if(MINGW)
+    add_link_options(-static)
+endif()
 
 # Put all .exe files in build/bin
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
