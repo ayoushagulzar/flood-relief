@@ -4,9 +4,19 @@
 // from the manager's current state. No widget objects to keep in sync:
 // ReliefManager is the only source of truth.
 //
+// Screen:
+//   +---------+---------------------------------------+-------------+
+//   |         | search | Next | Serve all | tools      |             |
+//   | sidebar +---------------------------------------+ right panel |
+//   | (pages) | scenario title             tool hint  | (the page   |
+//   |         | [            map card             ]   |  chosen in  |
+//   |         | Today's highlights: 4 KPI cards       |  sidebar)   |
+//   +---------+---------------------------------------+-------------+
+//
 // Code is split over two files:
-//   app.cpp    - window, layout, map interaction, tools, rail, top bar
-//   panels.cpp - right panel (Requests | Depots | Why | Add form) and event log
+//   app.cpp    - window, layout, map, tools, sidebar, top bar, search, KPIs
+//   panels.cpp - right panel pages (Overview, Queue, Depots, Why, Events)
+//                and the Add-request form
 #pragma once
 
 #include <memory>
@@ -20,13 +30,14 @@
 #include "relief/scenario_loader.h"
 
 struct Layout {
-    Rectangle topBar, rail, map, rightPanel, eventLog;
+    Rectangle sidebar, topBar, header, map, kpis, rightPanel;
 };
 
 // The current tool is a tiny state machine. It lives HERE (in App), the
 // map only reports "clicked at this point"; App decides what that means.
 enum class Tool { Select, BlockRoad, AddRequest };
-enum class Tab { Requests, Depots, Why };
+// What the right panel shows (picked in the sidebar).
+enum class Page { Overview, Queue, Depots, Why, Events };
 
 // What the Add-request form is editing (only used while Tool::AddRequest).
 struct AddForm {
@@ -55,18 +66,28 @@ private:
     void processAll();
     void setTool(Tool t);
     void buildOverlay(MapOverlay& o) const;
+    void drawSidebar(Rectangle r);
     void drawTopBar(Rectangle r);
-    void drawRail(Rectangle r);
+    void drawHeader(Rectangle r);
+    void drawMapCard();
+    void drawKpis(Rectangle r);
     void drawInfoCard();
     Rectangle infoCardRect() const;
+    // search box
+    Rectangle searchRect() const;
+    void updateSearch();
+    void drawSearch();
+    void findMatches(DynamicArray<int>& out) const;
+    void selectAndShow(int nodeId);
 
     // ---- panels.cpp ----
     void drawRightPanel(Rectangle r);
-    void drawRequestsTab(Rectangle r);
-    void drawDepotsTab(Rectangle r);
-    void drawWhyTab(Rectangle r);
+    void drawOverviewPage(Rectangle r);
+    void drawQueuePage(Rectangle r);
+    void drawDepotsPage(Rectangle r);
+    void drawWhyPage(Rectangle r);
+    void drawEventsPage(Rectangle r);
     void drawAddForm(Rectangle r);
-    void drawEventLog(Rectangle r);
     std::string nextRequestId() const;
 
     std::unique_ptr<ReliefManager> manager_;  // unique_ptr: "Reset" builds a fresh one
@@ -77,12 +98,16 @@ private:
     Layout layout_{};
 
     Tool tool_ = Tool::Select;
-    Tab tab_ = Tab::Requests;
+    Page page_ = Page::Overview;
     AddForm form_;
 
     int hoverNode_ = -1, hoverU_ = -1, hoverV_ = -1;
     int selNode_ = -1, selU_ = -1, selV_ = -1;
-    int panelHoverNode_ = -1;  // request row under the mouse -> highlight on map
+    int panelHoverNode_ = -1;  // row under the mouse in a panel -> highlight on map
+    int lastPanelHover_ = -1;  // ... as it was last frame (the map is drawn first)
+
+    bool searchFocus_ = false;
+    std::string searchText_;
 
     double pulseStart_ = -100.0;  // GetTime() when the last request was served
     int pulseNode_ = -1;

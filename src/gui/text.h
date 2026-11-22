@@ -1,4 +1,4 @@
-// text.h - one font family (Archivo, OFL licence) in three sizes, plus small
+// text.h - one font family (Poppins, OFL licence) in three sizes, plus small
 // drawing helpers used by every panel: text, uppercase labels, wrapping, icons.
 #pragma once
 
@@ -12,7 +12,7 @@ enum class Weight { Regular, SemiBold };
 
 class Fonts {
 public:
-    // Loads assets/fonts/Archivo-*.ttf at 13 / 16 / 22 px. Falls back to
+    // Loads assets/fonts/Poppins-*.ttf at 16 / 18 / 28 px. Falls back to
     // raylib's built-in font if a file is missing (the app still runs).
     void load();
     void unload();
@@ -30,7 +30,7 @@ void setFonts(const Fonts* fonts);  // called once by App
 
 // Normal text. Top-left at pos.
 void text(const std::string& s, Vector2 pos, float size, Color c, Weight w = Weight::Regular);
-// UPPERCASE label with wide letter spacing (the Ink & signal look).
+// Small UPPERCASE tag with a little letter spacing.
 void caps(const std::string& s, Vector2 pos, float size, Color c, Weight w = Weight::SemiBold);
 // Right-aligned: the text ENDS at rightX.
 void textRight(const std::string& s, float rightX, float y, float size, Color c, Weight w = Weight::Regular);
@@ -48,7 +48,14 @@ std::string upper(const std::string& s);
 void hline(float x1, float x2, float y, Color c);
 void vline(float x, float y1, float y2, Color c);
 
-enum class Icon { Select, Block, Add, Next, All, Home };
+// Rounded rectangles with the radius in PIXELS (raylib wants a 0..1 ratio).
+void roundRect(Rectangle r, float radius, Color fill);
+void roundBorder(Rectangle r, float radius, Color line, float thick = 1);
+// Card = soft shadow + white fill + hairline border.
+void card(Rectangle r, float radius = 10);
+
+// Simple line icons drawn with raylib shapes (no image files needed).
+enum class Icon { Select, Block, Add, Next, All, Home, Map, List, Box, Help, Log, Drop, Search, Clock, Check, Road };
 void icon(Icon kind, Vector2 center, float size, Color c);
 
 }  // namespace ui

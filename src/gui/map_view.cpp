@@ -4,6 +4,7 @@
 #include <cmath>
 #include <string>
 
+#include "gui/outline.h"
 #include "gui/text.h"
 #include "gui/theme.h"
 
@@ -42,21 +43,22 @@ bool segmentVisible(Vector2 a, Vector2 b, Rectangle r) {
     return maxX >= r.x && minX <= r.x + r.width && maxY >= r.y && minY <= r.y + r.height;
 }
 
-// Text with a 1 px black outline, so labels stay readable over tiles and roads.
+// Text with a 1 px white outline, so labels stay readable over tiles and roads.
 void haloText(const std::string& s, Vector2 p, float size, Color c, Weight w) {
     const Vector2 offs[4] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
     for (const Vector2& o : offs) ui::text(s, add(p, o), size, theme::kHalo, w);
     ui::text(s, p, size, c, w);
 }
 
-void hollowSquare(Vector2 c, float half, float thick, Color col) {
-    DrawRectangleRec({c.x - half, c.y - half, half * 2, half * 2}, theme::kMapBackground);
-    DrawRectangleLinesEx({c.x - half, c.y - half, half * 2, half * 2}, thick, col);
+// Depot: a filled dark square with a white edge.
+void depotSquare(Vector2 c, float half, Color col) {
+    DrawRectangleRec({c.x - half - 1.5f, c.y - half - 1.5f, half * 2 + 3, half * 2 + 3}, theme::kLand);
+    DrawRectangleRec({c.x - half, c.y - half, half * 2, half * 2}, col);
 }
 
 void hollowTriangle(Vector2 c, float r, float thick, Color col) {
     Vector2 top{c.x, c.y - r}, left{c.x - r * 0.9f, c.y + r * 0.7f}, right{c.x + r * 0.9f, c.y + r * 0.7f};
-    DrawTriangle(top, left, right, theme::kMapBackground);  // counter-clockwise order
+    DrawTriangle(top, left, right, theme::kLand);  // counter-clockwise order
     DrawLineEx(top, left, thick, col);
     DrawLineEx(left, right, thick, col);
     DrawLineEx(right, top, thick, col);
@@ -113,6 +115,16 @@ void MapView::resetView() {
     cam_.offset = {rect_.x + rect_.width / 2, rect_.y + rect_.height / 2};
 }
 
+// Search: fly to a place and zoom in a little (never zoom OUT).
+void MapView::focusOn(Vector2 world) {
+    float z = fitZoom() * 2.5f;
+    if (cam_.zoom < z) cam_.zoom = z;
+    cam_.target = world;
+    cam_.offset = {rect_.x + rect_.width / 2, rect_.y + rect_.height / 2};
+    userMoved_ = true;
+    clampCamera();
+}
+
 // Keeps the view centred on Pakistan: the world point in the middle of the
 // map may not leave Pakistan's bounding box.
 void MapView::clampCamera() {
@@ -125,7 +137,7 @@ void MapView::clampCamera() {
     cam_.offset = centre;
 }
 
-void MapView::update(Rectangle mapRect, bool mouseOverUI) {
+void MapView::update(Rectangle mapRect, bool mouseOverUI, bool keyboard) {
     bool resized = mapRect.width != rect_.width || mapRect.height != rect_.height || mapRect.x != rect_.x ||
                    mapRect.y != rect_.y;
     rect_ = mapRect;
@@ -155,15 +167,15 @@ void MapView::update(Rectangle mapRect, bool mouseOverUI) {
         cam_.offset = mouse;
         clampCamera();
     }
-    if (IsKeyPressed(KEY_HOME)) {
+    if (keyboard && IsKeyPressed(KEY_HOME)) {
         resetView();
         userMoved_ = false;
     }
-    if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD)) {
+    if (keyboard && (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD))) {
         cam_.zoom = clampf(cam_.zoom * 1.5f, minZoom, kMaxZoom);
         userMoved_ = true;
     }
-    if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT)) {
+    if (keyboard && (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT))) {
         cam_.zoom = clampf(cam_.zoom / 1.5f, minZoom, kMaxZoom);
         userMoved_ = true;
     }
@@ -204,11 +216,11 @@ void MapView::draw(const ReliefManager& m, const MapOverlay& overlay) {
                      static_cast<int>(rect_.height));
     DrawRectangleRec(rect_, theme::kMapBackground);
 
+    drawOutline();  // offline background; tiles (if any) cover it
     BeginMode2D(cam_);
     drawBasemap();
     EndMode2D();
 
-    drawGraticule();
     drawRoads(g, overlay);
     drawRoutes(g, overlay);
     drawNodes(m, overlay);
@@ -220,20 +232,28 @@ void MapView::draw(const ReliefManager& m, const MapOverlay& overlay) {
 
 void MapView::drawBasemap() { basemap_.draw(cam_, rect_); }
 
-// Latitude/longitude lines every 2 degrees: the "chart" feel, and they keep
-// the map readable even when the tiles are offline.
-void MapView::drawGraticule() {
-    for (int lon = 60; lon <= 78; lon += 2) {
-        Vector2 a = worldToScreen(latLonToWorld(20.0, lon)), b = worldToScreen(latLonToWorld(40.0, lon));
-        DrawLineEx(a, b, 1, theme::kGraticule);
-        if (a.x > rect_.x + 40 && a.x < rect_.x + rect_.width - 60)
-            ui::text(std::to_string(lon) + "°E", {a.x + 4, rect_.y + theme::kPad}, theme::kSmall, theme::kFaint);
-    }
-    for (int lat = 22; lat <= 38; lat += 2) {
-        Vector2 a = worldToScreen(latLonToWorld(lat, 58.0)), b = worldToScreen(latLonToWorld(lat, 80.0));
-        DrawLineEx(a, b, 1, theme::kGraticule);
-        if (a.y > rect_.y + 30 && a.y < rect_.y + rect_.height - 30)
-            ui::text(std::to_string(lat) + "°N", {rect_.x + theme::kPad, a.y - 16}, theme::kSmall, theme::kFaint);
+// Pakistan + sea from outline.h: the map still looks like a map with no
+// internet. Triangles are projected every frame (about 70 of them: cheap).
+// raylib skips triangles given clockwise, so we check each one's winding.
+void MapView::drawOutline() {
+    auto fill = [&](const LatLon* pts, const int* tris, std::size_t triCount, Color c) {
+        for (std::size_t t = 0; t < triCount; ++t) {
+            Vector2 a = worldToScreen(latLonToWorld(pts[tris[t * 3]].lat, pts[tris[t * 3]].lon));
+            Vector2 b = worldToScreen(latLonToWorld(pts[tris[t * 3 + 1]].lat, pts[tris[t * 3 + 1]].lon));
+            Vector2 d = worldToScreen(latLonToWorld(pts[tris[t * 3 + 2]].lat, pts[tris[t * 3 + 2]].lon));
+            float cross = (b.x - a.x) * (d.y - a.y) - (b.y - a.y) * (d.x - a.x);
+            if (cross < 0) DrawTriangle(a, b, d, c);  // counter-clockwise on screen
+            else DrawTriangle(a, d, b, c);
+        }
+    };
+    fill(kSea, kSeaTriangles, sizeof(kSeaTriangles) / sizeof(int) / 3, theme::kSea);
+    fill(kBorder, kBorderTriangles, sizeof(kBorderTriangles) / sizeof(int) / 3, theme::kLand);
+    const std::size_t n = sizeof(kBorder) / sizeof(LatLon);
+    for (std::size_t i = 0; i < n; ++i) {
+        const LatLon& p = kBorder[i];
+        const LatLon& q = kBorder[(i + 1) % n];
+        DrawLineEx(worldToScreen(latLonToWorld(p.lat, p.lon)), worldToScreen(latLonToWorld(q.lat, q.lon)), 1.2f,
+                   theme::kBorderLine);
     }
 }
 
@@ -253,8 +273,8 @@ void MapView::drawRoads(const Graph& g, const MapOverlay& o) {
                            (o.hoverRoadV == static_cast<int>(u) && o.hoverRoadU == e.to);
             bool isSel = (o.selectedRoadU == static_cast<int>(u) && o.selectedRoadV == e.to) ||
                          (o.selectedRoadV == static_cast<int>(u) && o.selectedRoadU == e.to);
-            if (isSel) DrawLineEx(a, b, w + 8, Fade(theme::kAccent, 0.35f));
-            if (isHover) DrawLineEx(a, b, w + 8, Fade(theme::kText, 0.22f));
+            if (isSel) DrawLineEx(a, b, w + 8, Fade(theme::kAccent, 0.30f));
+            if (isHover) DrawLineEx(a, b, w + 8, Fade(theme::kText, 0.15f));
 
             if (e.blocked) {
                 phase = 0;
@@ -275,19 +295,19 @@ void MapView::drawRoads(const Graph& g, const MapOverlay& o) {
     }
 }
 
-// The last delivery route(s): a soft wide glow plus a bright dashed line
+// The last delivery route(s): a white casing plus a dark dashed line
 // whose dashes move from the depot towards the people (offset = time).
 void MapView::drawRoutes(const Graph& g, const MapOverlay& o) {
     float t = static_cast<float>(GetTime());
     for (std::size_t r = 0; r < o.routes.size(); ++r) {
         const DynamicArray<int>& path = o.routes[r];
         for (std::size_t i = 1; i < path.size(); ++i) {
-            DrawLineEx(nodeScreen(g, path[i - 1]), nodeScreen(g, path[i]), 9, Fade(theme::kRoute, 0.16f));
+            DrawLineEx(nodeScreen(g, path[i - 1]), nodeScreen(g, path[i]), 7, theme::kRouteCasing);
         }
         float phase = -t * 36.0f;  // negative: dashes travel along the path
         phase = std::fmod(phase, 16.0f) + 16.0f;
         for (std::size_t i = 1; i < path.size(); ++i) {
-            dashedLine(nodeScreen(g, path[i - 1]), nodeScreen(g, path[i]), 3.0f, 10, 6, phase, theme::kRoute);
+            dashedLine(nodeScreen(g, path[i - 1]), nodeScreen(g, path[i]), 3.2f, 10, 5, phase, theme::kRoute);
         }
     }
 }
@@ -325,20 +345,21 @@ void MapView::drawNodes(const ReliefManager& m, const MapOverlay& o) {
         // ring for open requests: colour = urgency (red-orange if deferred)
         if (state[i] >= 2) {
             Color rc = state[i] == 3 ? theme::kDeferred : theme::urgencyColor(urgent[i]);
-            DrawRing(p, 8 * zoomBoost - 1.4f, 8 * zoomBoost, 0, 360, 32, rc);
+            DrawCircleV(p, 8 * zoomBoost, Fade(rc, 0.12f));
+            DrawRing(p, 8 * zoomBoost - 1.5f, 8 * zoomBoost, 0, 360, 32, rc);
         } else if (state[i] == 1) {
             DrawRing(p, 8 * zoomBoost - 1.2f, 8 * zoomBoost, 0, 360, 32, Fade(theme::kFulfilled, 0.7f));
         }
 
         if (n.type == NodeType::Depot) {
-            hollowSquare(p, 4.5f * zoomBoost, 1.6f, theme::kDepot);
+            depotSquare(p, 4.0f * zoomBoost, theme::kDepot);
         } else if (n.type == NodeType::Shelter) {
             hollowTriangle(p, 5.0f * zoomBoost, 1.4f, theme::kShelter);
         } else {
             DrawCircleV(p, 2.6f * zoomBoost, theme::kCity);
         }
 
-        if (static_cast<int>(i) == o.hoverNode) DrawRing(p, 11 * zoomBoost, 12.5f * zoomBoost, 0, 360, 32, theme::kText);
+        if (static_cast<int>(i) == o.hoverNode) DrawRing(p, 11 * zoomBoost, 12.5f * zoomBoost, 0, 360, 32, theme::kMuted);
         if (static_cast<int>(i) == o.selectedNode)
             DrawRing(p, 11 * zoomBoost, 13 * zoomBoost, 0, 360, 32, theme::kAccent);
     }
@@ -361,8 +382,8 @@ void MapView::drawLabels(const ReliefManager& m, const MapOverlay& o) {
     // so labels never cover them.
     DynamicArray<Rectangle> used;
     used.pushBack(legendRect());
-    used.pushBack({rect_.x + rect_.width - 180, rect_.y, 180, 70});                    // zoom + home hint
-    used.pushBack({rect_.x + rect_.width - 220, rect_.y + rect_.height - 34, 220, 34});  // attribution
+    used.pushBack({rect_.x + rect_.width - 240, rect_.y, 240, 70});                    // zoom + home hint
+    used.pushBack({rect_.x + rect_.width - 260, rect_.y + rect_.height - 40, 260, 40});  // attribution
     for (std::size_t i = 0; i < g.nodeCount(); ++i) {
         Vector2 p = nodeScreen(g, static_cast<int>(i));
         used.pushBack({p.x - 6, p.y - 6, 12, 12});
@@ -379,13 +400,13 @@ void MapView::drawLabels(const ReliefManager& m, const MapOverlay& o) {
             box.x = p.x - 10 - tw;
             if (overlapsAny(used, box)) return;
         }
-        if (force) DrawRectangleRec({box.x - 3, box.y - 1, box.width + 6, box.height + 2}, theme::kOverlay);
+        if (force) ui::roundRect({box.x - 5, box.y - 2, box.width + 10, box.height + 4}, 5, theme::kOverlay);
         used.pushBack(box);
         haloText(name, {box.x, box.y}, theme::kSmall, c, w);
     };
 
     // Hovered / selected first, so they always win the space.
-    if (o.selectedNode >= 0) place(o.selectedNode, theme::kText, Weight::SemiBold, true);
+    if (o.selectedNode >= 0) place(o.selectedNode, theme::kAccent, Weight::SemiBold, true);
     if (o.hoverNode >= 0 && o.hoverNode != o.selectedNode) place(o.hoverNode, theme::kText, Weight::SemiBold, true);
 
     for (std::size_t i = 0; i < g.nodeCount(); ++i) {  // depots always (they are the "big" places)
@@ -397,7 +418,7 @@ void MapView::drawLabels(const ReliefManager& m, const MapOverlay& o) {
     for (std::size_t i = 0; i < g.nodeCount(); ++i) {  // then shelters, then cities
         int id = static_cast<int>(i);
         if (g.node(id).type == NodeType::Shelter && id != o.hoverNode && id != o.selectedNode)
-            place(id, theme::kText, Weight::Regular);
+            place(id, theme::kLabel, Weight::Regular);
     }
     for (std::size_t i = 0; i < g.nodeCount(); ++i) {
         int id = static_cast<int>(i);
@@ -412,24 +433,23 @@ void MapView::drawLabels(const ReliefManager& m, const MapOverlay& o) {
 
 // Top-left: that corner of the map is Afghanistan, so it hides no node.
 Rectangle MapView::legendRect() const {
-    const float rowH = 18, colW = 112;
-    return {rect_.x + theme::kGap + 40, rect_.y + theme::kGap + 24, theme::kPad * 2 + colW * 2,
-            theme::kPad * 2 + 18 + rowH * 4};
+    const float rowH = 22, colW = 146;
+    return {rect_.x + theme::kGap, rect_.y + theme::kGap, theme::kPad * 2 + colW * 2, theme::kPad * 2 + 24 + rowH * 4};
 }
 
 void MapView::drawLegend() {
-    const float rowH = 18, colW = 112;
+    const float rowH = 22, colW = 146;
     Rectangle box = legendRect();
-    DrawRectangleRec(box, theme::kOverlay);
-    DrawRectangleLinesEx(box, 1, theme::kRule);
-    ui::caps("Legend", {box.x + theme::kPad + 4, box.y + theme::kPad}, theme::kSmall, theme::kMuted);
+    ui::roundRect(box, 8, theme::kOverlay);
+    ui::roundBorder(box, 8, theme::kRule);
+    ui::text("Legend", {box.x + theme::kPad + 4, box.y + theme::kPad - 1}, theme::kSmall, theme::kText, Weight::SemiBold);
 
-    float y0 = box.y + theme::kPad + 20;
+    float y0 = box.y + theme::kPad + 25;
     float phase = 0;
     for (int i = 0; i < 8; ++i) {
         float x = box.x + theme::kPad + 4 + static_cast<float>(i / 4) * colW;
         float y = y0 + static_cast<float>(i % 4) * rowH;
-        Vector2 c{x + 10, y + 7};
+        Vector2 c{x + 10, y + 9};
         const char* label = "";
         switch (i) {
             case 0: DrawLineEx({x, c.y}, {x + 20, c.y}, 3, theme::kRoute); label = "Last route"; break;
@@ -437,27 +457,25 @@ void MapView::drawLegend() {
             case 2: DrawLineEx({x, c.y}, {x + 20, c.y}, 2, theme::kDamaged); label = "Damaged"; break;
             case 3: phase = 0; dashedLine({x, c.y}, {x + 20, c.y}, 2, 5, 3, phase, theme::kBlocked); label = "Blocked"; break;
             case 4: DrawCircleV(c, 3, theme::kCity); label = "City"; break;
-            case 5: hollowSquare(c, 4.5f, 1.6f, theme::kDepot); label = "Depot"; break;
+            case 5: depotSquare(c, 4.0f, theme::kDepot); label = "Depot"; break;
             case 6: hollowTriangle(c, 5, 1.4f, theme::kShelter); label = "Shelter"; break;
-            case 7: DrawRing(c, 5.6f, 7, 0, 360, 24, theme::urgencyColor(5)); label = "Open request"; break;
+            case 7: DrawRing(c, 5.6f, 7, 0, 360, 24, theme::urgencyColor(5)); label = "Urgent request"; break;
         }
-        ui::text(label, {x + 28, y}, theme::kSmall, theme::kText);
+        ui::text(label, {x + 28, y}, theme::kSmall, theme::kMuted);
     }
 }
 
 void MapView::drawCorner() {
     float right = rect_.x + rect_.width - theme::kGap;
-    std::string z = "Z " + std::to_string(basemap_.tileZoomFor(cam_.zoom));
-    ui::caps(z, {right - ui::measureCaps(z, theme::kSmall), rect_.y + theme::kGap}, theme::kSmall, theme::kMuted);
-    std::string home = "Home: reset view";
-    ui::textRight(home, right, rect_.y + theme::kGap + 18, theme::kSmall, theme::kFaint);
+    std::string z = "Zoom " + std::to_string(basemap_.tileZoomFor(cam_.zoom)) + "  ·  Home resets";
+    ui::textRight(z, right, rect_.y + theme::kGap, theme::kSmall, theme::kMuted);
     if (basemap_.pendingDownloads() > 0)
-        ui::textRight("Loading map tiles...", right, rect_.y + theme::kGap + 36, theme::kSmall, theme::kFaint);
+        ui::textRight("Loading map tiles...", right, rect_.y + theme::kGap + 21, theme::kSmall, theme::kFaint);
 
     // Attribution is required by the OSM tile usage policy: always visible.
     std::string attr = "© OpenStreetMap contributors";
     float w = ui::measure(attr, theme::kSmall) + 12;
-    Rectangle box{rect_.x + rect_.width - w - theme::kPad, rect_.y + rect_.height - 22 - theme::kPad, w, 22};
-    DrawRectangleRec(box, theme::kOverlay);
+    Rectangle box{rect_.x + rect_.width - w - theme::kPad, rect_.y + rect_.height - 26 - theme::kPad, w, 26};
+    ui::roundRect(box, 6, theme::kOverlay);
     ui::text(attr, {box.x + 6, box.y + 4}, theme::kSmall, theme::kMuted);
 }

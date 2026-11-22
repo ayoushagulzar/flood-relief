@@ -45,8 +45,10 @@ public:
 
     // Input: wheel zoom towards the cursor, drag to pan, Home resets.
     // mouseOverUI = the mouse is on a panel, so the map must ignore it.
-    void update(Rectangle mapRect, bool mouseOverUI);
+    // keyboard = false while the user types somewhere else (search box).
+    void update(Rectangle mapRect, bool mouseOverUI, bool keyboard = true);
     void resetView();
+    void focusOn(Vector2 world);  // centre on a world point and zoom in
 
     // True for one frame when the left button was released WITHOUT dragging:
     // a real click on the map (Phase 8 uses this for picking).
@@ -59,8 +61,8 @@ public:
     void draw(const ReliefManager& m, const MapOverlay& overlay);
 
 private:
-    void drawBasemap();  // tiles (or a plain grid if offline)
-    void drawGraticule();
+    void drawOutline();  // Pakistan + sea from outline.h (works offline)
+    void drawBasemap();  // OSM tiles on top, where they have loaded
     void drawRoads(const Graph& g, const MapOverlay& o);
     void drawRoutes(const Graph& g, const MapOverlay& o);
     void drawNodes(const ReliefManager& m, const MapOverlay& o);
