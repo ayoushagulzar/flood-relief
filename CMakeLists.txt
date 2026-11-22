@@ -77,9 +77,17 @@ if(FLOOD_BUILD_GUI)
     )
     FetchContent_MakeAvailable(raylib)
 
-    file(GLOB_RECURSE GUI_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/gui/*.cpp)
+    # src/gui = raylib drawing code. src/net = WinINet tile downloads (never includes raylib).
+    file(GLOB_RECURSE GUI_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_SOURCE_DIR}/src/gui/*.cpp
+        ${CMAKE_SOURCE_DIR}/src/net/*.cpp
+    )
+    find_package(Threads REQUIRED)   # the tile downloader runs on a worker thread
     add_executable(relief_gui app/gui_main.cpp ${GUI_SOURCES})
-    target_link_libraries(relief_gui PRIVATE relief_core raylib)
+    target_link_libraries(relief_gui PRIVATE relief_core raylib Threads::Threads)
+    if(WIN32)
+        target_link_libraries(relief_gui PRIVATE wininet)
+    endif()
     flood_warnings(relief_gui)
 
     # Copy data/ and assets/ next to the .exe so relative paths work
