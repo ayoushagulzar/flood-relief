@@ -1,0 +1,183 @@
+# Flood Relief scenario: Pakistan, modelled on the 2022 floods (Sindh, south Punjab, KP).
+# Travel times are rough estimates for trucks (not live data). Coordinates: WGS84 lat, lon.
+# Format: see src/relief/scenario_loader.h. A road name '-' means an unnamed local road. Fields are comma-separated; '#' starts a comment.
+
+[NODES]
+# name,              type,    lat,     lon
+Karachi,             city,    24.8607, 67.0011
+Thatta,              city,    24.7461, 67.9236
+Hyderabad,           city,    25.3960, 68.3578
+Jamshoro,            city,    25.4304, 68.2809
+Sehwan,              city,    26.4245, 67.8601
+Dadu,                city,    26.7319, 67.7750
+Johi,                city,    26.6930, 67.6140
+Mehar,               city,    27.1803, 67.8217
+Larkana,             city,    27.5570, 68.2264
+Shikarpur,           city,    27.9556, 68.6382
+Jacobabad,           city,    28.2769, 68.4514
+Kandhkot,            city,    28.2440, 69.1820
+Kashmore,            city,    28.4326, 69.5836
+Sukkur,              city,    27.7052, 68.8574
+Khairpur,            city,    27.5295, 68.7592
+Moro,                city,    26.6640, 68.0010
+Nawabshah,           city,    26.2442, 68.4100
+Hala,                city,    25.8146, 68.4229
+Tando Adam,          city,    25.7676, 68.6622
+Sanghar,             city,    26.0464, 68.9481
+Mirpur Khas,         city,    25.5276, 69.0111
+Umerkot,             city,    25.3616, 69.7360
+Badin,               city,    24.6560, 68.8370
+Ghotki,              city,    28.0060, 69.3150
+Rahim Yar Khan,      city,    28.4202, 70.2952
+Bahawalpur,          city,    29.3956, 71.6836
+Multan,              city,    30.1575, 71.5249
+Dera Ghazi Khan,     city,    30.0561, 70.6348
+Rajanpur,            city,    29.1044, 70.3301
+Dera Ismail Khan,    city,    31.8314, 70.9019
+Lahore,              city,    31.5204, 74.3587
+Islamabad,           city,    33.6844, 73.0479
+Peshawar,            city,    34.0151, 71.5249
+Nowshera,            city,    34.0153, 71.9747
+Mingora,             city,    34.7717, 72.3600
+Abbottabad,          city,    34.1688, 73.2215
+Gilgit,              city,    35.9208, 74.3080
+Quetta,              city,    30.1798, 66.9750
+Sibi,                city,    29.5430, 67.8773
+Dera Murad Jamali,   city,    28.5466, 68.2231
+Khuzdar,             city,    27.8000, 66.6167
+
+# relief camps (shelters)
+Dadu Camp,           shelter, 26.7450, 67.8000
+Johi Camp,           shelter, 26.6800, 67.6350
+Mehar Camp,          shelter, 27.1950, 67.8450
+Sehwan Camp,         shelter, 26.4400, 67.8850
+Jacobabad Camp,      shelter, 28.2950, 68.4300
+Khairpur Camp,       shelter, 27.5450, 68.7750
+Rajanpur Camp,       shelter, 29.1250, 70.3200
+Nowshera Camp,       shelter, 34.0000, 71.9950
+
+# supply depots
+Karachi Depot,       depot,   24.8500, 67.0500
+Hyderabad Depot,     depot,   25.3800, 68.3750
+Sukkur Depot,        depot,   27.6900, 68.8750
+Larkana Depot,       depot,   27.5700, 68.2050
+Multan Depot,        depot,   30.1750, 71.4950
+Quetta Depot,        depot,   30.1950, 66.9950
+Islamabad Depot,     depot,   33.7000, 73.0650
+
+[ROADS]
+# from,            to,                minutes, type,     name,            condition (optional)
+Karachi,           Hyderabad,         105,     motorway, M-9
+Karachi,           Thatta,            110,     highway,  N-5
+Thatta,            Hyderabad,         120,     highway,  N-5
+Hyderabad,         Jamshoro,          25,      road,     Kotri Bridge
+Jamshoro,          Sehwan,            150,     highway,  N-55
+Sehwan,            Dadu,              80,      highway,  N-55,            flooded
+Dadu,              Mehar,             60,      highway,  N-55,            flooded
+Mehar,             Larkana,           80,      highway,  N-55,            damaged
+Larkana,           Shikarpur,         90,      highway,  N-55
+Shikarpur,         Kandhkot,          95,      highway,  N-55
+Kandhkot,          Kashmore,          50,      highway,  N-55
+Kashmore,          Rajanpur,          130,     highway,  N-55,            damaged
+Rajanpur,          Dera Ghazi Khan,   120,     highway,  N-55
+Dera Ghazi Khan,   Dera Ismail Khan,  230,     highway,  N-55
+Dera Ismail Khan,  Peshawar,          330,     highway,  N-55
+Dadu,              Johi,              35,      road,     Johi Road,       flooded
+Dadu,              Moro,              40,      road,     Dadu-Moro Bridge
+Hyderabad,         Hala,              55,      highway,  N-5
+Hala,              Nawabshah,         75,      highway,  N-5
+Nawabshah,         Moro,              65,      highway,  N-5
+Moro,              Khairpur,          120,     highway,  N-5
+Khairpur,          Sukkur,            30,      highway,  N-5
+Sukkur,            Ghotki,            75,      highway,  N-5
+Ghotki,            Rahim Yar Khan,    110,     highway,  N-5
+Rahim Yar Khan,    Bahawalpur,        180,     highway,  N-5
+Bahawalpur,        Multan,            105,     highway,  N-5
+Sukkur,            Multan,            260,     motorway, M-5
+Multan,            Lahore,            230,     motorway, M-4
+Lahore,            Islamabad,         250,     motorway, M-2
+Islamabad,         Nowshera,          85,      motorway, M-1
+Nowshera,          Peshawar,          35,      motorway, M-1
+Nowshera,          Mingora,           160,     highway,  N-45,            damaged
+Islamabad,         Abbottabad,        150,     highway,  N-35
+Abbottabad,        Gilgit,            600,     highway,  KKH,             blocked
+Multan,            Dera Ghazi Khan,   110,     highway,  N-70
+Dera Ghazi Khan,   Quetta,            480,     highway,  N-70
+Sukkur,            Shikarpur,         45,      highway,  N-65
+Shikarpur,         Jacobabad,         50,      highway,  N-65,            damaged
+Jacobabad,         Dera Murad Jamali, 75,      highway,  N-65
+Dera Murad Jamali, Sibi,              110,     highway,  N-65
+Sibi,              Quetta,            180,     highway,  N-65
+Karachi,           Khuzdar,           330,     highway,  N-25
+Khuzdar,           Quetta,            300,     highway,  N-25
+Larkana,           Sukkur,            90,      road,     Larkana-Sukkur Road
+Hala,              Tando Adam,        30,      road,     Tando Adam Road
+Tando Adam,        Sanghar,           55,      road,     Sanghar Road
+Nawabshah,         Sanghar,           60,      road,     Sanghar Road
+Hyderabad,         Mirpur Khas,       70,      road,     Mirpur Khas Road
+Mirpur Khas,       Umerkot,           85,      road,     Umerkot Road
+Hyderabad,         Badin,             120,     road,     Badin Road
+Kashmore,          Ghotki,            90,      road,     Guddu Barrage Road
+# camps and depots to their towns ("-" = unnamed local road)
+Dadu Camp,         Dadu,              10,      road,     -
+Johi Camp,         Johi,              10,      road,     -
+Mehar Camp,        Mehar,             10,      road,     -
+Sehwan Camp,       Sehwan,            10,      road,     -
+Jacobabad Camp,    Jacobabad,         10,      road,     -
+Khairpur Camp,     Khairpur,          10,      road,     -
+Rajanpur Camp,     Rajanpur,          10,      road,     -
+Nowshera Camp,     Nowshera,          10,      road,     -
+Karachi Depot,     Karachi,           15,      road,     -
+Hyderabad Depot,   Hyderabad,         10,      road,     -
+Sukkur Depot,      Sukkur,            10,      road,     -
+Larkana Depot,     Larkana,           10,      road,     -
+Multan Depot,      Multan,            15,      road,     -
+Quetta Depot,      Quetta,            15,      road,     -
+Islamabad Depot,   Islamabad,         15,      road,     -
+
+[STOCK]
+# depot,           supply,   quantity
+Karachi Depot,     food,     3000
+Karachi Depot,     water,    4000
+Karachi Depot,     medicine, 800
+Karachi Depot,     shelter,  200
+Hyderabad Depot,   food,     1500
+Hyderabad Depot,   water,    2000
+Hyderabad Depot,   medicine, 300
+Sukkur Depot,      food,     1200
+Sukkur Depot,      water,    1500
+Sukkur Depot,      medicine, 200
+Sukkur Depot,      shelter,  100
+Larkana Depot,     food,     600
+Larkana Depot,     water,    800
+Multan Depot,      food,     2000
+Multan Depot,      water,    1500
+Multan Depot,      medicine, 500
+Multan Depot,      shelter,  150
+Quetta Depot,      food,     800
+Quetta Depot,      water,    600
+Quetta Depot,      medicine, 150
+Islamabad Depot,   food,     2500
+Islamabad Depot,   water,    2000
+Islamabad Depot,   medicine, 900
+Islamabad Depot,   shelter,  300
+
+[REQUESTS]
+# id,  location,       supply,   quantity, urgency, people, vulnerable
+R-01,  Dadu Camp,      water,    1200,     5,       8000,   yes
+R-02,  Johi Camp,      food,     900,      5,       6500,   yes
+R-03,  Mehar Camp,     medicine, 300,      4,       4000,   yes
+R-04,  Sehwan Camp,    shelter,  400,      4,       3000,   no
+R-05,  Jacobabad Camp, water,    800,      4,       5000,   yes
+R-06,  Khairpur Camp,  food,     600,      3,       3500,   no
+R-07,  Larkana,        water,    500,      3,       2500,   no
+R-08,  Dadu Camp,      medicine, 400,      5,       8000,   yes
+R-09,  Rajanpur Camp,  food,     700,      4,       4200,   yes
+R-10,  Nowshera Camp,  shelter,  300,      3,       2000,   no
+R-11,  Mingora,        medicine, 150,      3,       1500,   no
+R-12,  Badin,          food,     400,      2,       1800,   no
+R-13,  Umerkot,        water,    300,      2,       1200,   no
+R-14,  Sanghar,        shelter,  250,      2,       1500,   yes
+R-15,  Jacobabad Camp, medicine, 250,      4,       5000,   yes
+R-16,  Sibi,           water,    300,      1,       900,    no
+R-17,  Gilgit,         food,     200,      3,       1000,   no
