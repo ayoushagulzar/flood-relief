@@ -89,8 +89,7 @@ flood-relief/
 │   └── pakistan.txt        
 ├── assets/fonts/             
 ├── report/
-│   ├── Flood_Relief_Report.pdf
-│   └── screenshots/
+│   └── Flood_Relief_Report.pdf
 ├── tools/                    
 └── CMakeLists.txt
 ```
