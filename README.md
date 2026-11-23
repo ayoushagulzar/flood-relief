@@ -9,12 +9,9 @@
   <img src="https://img.shields.io/badge/LANGUAGE-C%2B%2B17-3BA9F5?style=for-the-badge&labelColor=2A3142">
   <img src="https://img.shields.io/badge/COURSE-DATA%20STRUCTURES-7057E8?style=for-the-badge&labelColor=2A3142">
   <img src="https://img.shields.io/badge/GUI-RAYLIB%205.5-D63384?style=for-the-badge&labelColor=2A3142">
-  <img src="https://img.shields.io/badge/TESTS-318%20PASSING-2E8B57?style=for-the-badge&labelColor=2A3142">
+  <img src="https://img.shields.io/badge/TESTS-318%20PASSED-2E8B57?style=for-the-badge&labelColor=2A3142">
 </p>
 
-<p align="center">
-  <img src="report/screenshots/overview.png" alt="Flood Relief GUI" width="800">
-</p>
 
 ---
 
