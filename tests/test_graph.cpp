@@ -1,4 +1,4 @@
-// Tests for Graph (adjacency list of two-way roads).
+// tests for Graph
 #include "test_framework.h"
 #include "core/graph.h"
 
@@ -15,6 +15,7 @@ void addNodesGivesIds() {
     CHECK(g.node(b).type == NodeType::Depot);
 }
 
+// one road should be in both lists
 void roadIsTwoWay() {
     Graph g;
     int a = g.addNode("A", NodeType::City, 0, 0);
@@ -28,6 +29,7 @@ void roadIsTwoWay() {
     CHECK(g.neighbors(b).at(0).roadName == "N-5");
 }
 
+// blocking one side blocks both sides
 void blockAndReopenBothDirections() {
     Graph g;
     int a = g.addNode("A", NodeType::City, 0, 0);
@@ -41,12 +43,13 @@ void blockAndReopenBothDirections() {
         return;
     }
     CHECK(ab->blocked);
-    CHECK(ba->blocked);   // the other direction too!
-    CHECK(g.reopenRoad(b, a));  // reopen from the other side
+    CHECK(ba->blocked);
+    CHECK(g.reopenRoad(b, a));
     CHECK(!ab->blocked);
     CHECK(!ba->blocked);
 }
 
+// 100 clear -> 250 flooded -> 150 damaged
 void conditionChangesWeight() {
     Graph g;
     int a = g.addNode("A", NodeType::City, 0, 0);
@@ -74,6 +77,7 @@ void missingRoadReturnsFalse() {
     CHECK(!g.hasRoad(a, b));
 }
 
+// bad ids should throw
 void invalidIdsThrow() {
     Graph g;
     g.addNode("A", NodeType::City, 0, 0);
@@ -84,6 +88,7 @@ void invalidIdsThrow() {
     CHECK_THROWS_AS(g.addRoad(0, 0, 10, RoadType::Road, "x"), std::invalid_argument);
 }
 
+// name search uses the hash table, typo gives -1
 void findNodeByName() {
     Graph g;
     g.addNode("Karachi", NodeType::City, 24.86, 67.00);
@@ -93,11 +98,27 @@ void findNodeByName() {
     CHECK_THROWS_AS(g.addNode("Sukkur", NodeType::City, 0, 0), std::invalid_argument);
 }
 
-// TODO (you): one test of your own. Idea: a node with 3 roads has 3 neighbours,
-// and blocking one of them does NOT remove it from neighbors() (it is only marked).
+// blocked road is only marked, not removed from the list
+void blockedRoadStaysInList() {
+    Graph g;
+    int hub = g.addNode("Hub", NodeType::City, 0, 0);
+    int a = g.addNode("A", NodeType::City, 0, 0);
+    int b = g.addNode("B", NodeType::City, 0, 0);
+    int c = g.addNode("C", NodeType::City, 0, 0);
+    g.addRoad(hub, a, 10, RoadType::Road, "r1");
+    g.addRoad(hub, b, 20, RoadType::Road, "r2");
+    g.addRoad(hub, c, 30, RoadType::Road, "r3");
+    CHECK_EQ(g.neighbors(hub).size(), 3u);
+    CHECK(g.blockRoad(hub, b));
+    CHECK_EQ(g.neighbors(hub).size(), 3u);
+    const Edge* e = g.edgeBetween(hub, b);
+    CHECK(e != nullptr && e->blocked);
+    CHECK_EQ(g.roadCount(), 3u);
+}
 
-}  // namespace
+}
 
+// called from test_main.cpp
 void runGraphTests() {
     test::section("Graph");
     test::runCase("addNodesGivesIds", addNodesGivesIds);
@@ -107,4 +128,5 @@ void runGraphTests() {
     test::runCase("missingRoadReturnsFalse", missingRoadReturnsFalse);
     test::runCase("invalidIdsThrow", invalidIdsThrow);
     test::runCase("findNodeByName", findNodeByName);
+    test::runCase("blockedRoadStaysInList", blockedRoadStaysInList);
 }

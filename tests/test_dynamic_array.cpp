@@ -1,11 +1,13 @@
-// Tests for DynamicArray<T>. These are the "spec": make them all pass.
+// tests for DynamicArray
 #include <string>
 
 #include "core/dynamic_array.h"
 #include "test_framework.h"
 
+// anonymous namespace so these functions stay in this file only
 namespace {
 
+// push 10000 values and check all of them
 void pushBackManyValues() {
     DynamicArray<int> a;
     for (int i = 0; i < 10000; ++i)
@@ -19,6 +21,7 @@ void pushBackManyValues() {
     CHECK(a.capacity() >= a.size());
 }
 
+// capacity should double every time
 void capacityDoubles() {
     DynamicArray<int> a;
     std::size_t growths = 0;
@@ -28,13 +31,14 @@ void capacityDoubles() {
         if (a.capacity() != lastCap) {
             ++growths;
             if (lastCap != 0)
-                CHECK_EQ(a.capacity(), lastCap * 2); // doubling
+                CHECK_EQ(a.capacity(), lastCap * 2);
             lastCap = a.capacity();
         }
     }
-    CHECK(growths <= 12); // doubling to 1000 needs ~10 growths; +10 would need 100
+    CHECK(growths <= 12);
 }
 
+// empty array should throw instead of crashing
 void emptyArray() {
     DynamicArray<int> a;
     CHECK(a.isEmpty());
@@ -65,31 +69,33 @@ void atChecksBounds() {
     CHECK_EQ(c[0], 7);
 }
 
+// copy should have its own memory (deep copy)
 void copyIsIndependent() {
     DynamicArray<int> a;
     for (int i = 0; i < 5; ++i)
         a.pushBack(i);
-    DynamicArray<int> b(a); // copy constructor
+    DynamicArray<int> b(a);
     b[0] = 100;
     b.pushBack(99);
-    CHECK_EQ(a[0], 0); // original unchanged
+    CHECK_EQ(a[0], 0);
     CHECK_EQ(a.size(), 5u);
     CHECK_EQ(b.size(), 6u);
 
     DynamicArray<int> c;
     c.pushBack(42);
-    c = a; // copy assignment
+    c = a;
     c[1] = -1;
     CHECK_EQ(a[1], 1);
     CHECK_EQ(c.size(), 5u);
 }
 
+// a = a should not break the array
 void selfAssignment() {
     DynamicArray<int> a;
     for (int i = 0; i < 5; ++i)
         a.pushBack(i);
     DynamicArray<int>& alias = a;
-    a = alias; // a = a must not destroy the data
+    a = alias;
     CHECK_EQ(a.size(), 5u);
     CHECK_EQ(a[4], 4);
 }
@@ -98,9 +104,9 @@ void insertAtFrontMiddleEnd() {
     DynamicArray<int> a;
     a.pushBack(2);
     a.pushBack(4);
-    a.insertAt(0, 1);        // front  -> 1 2 4
-    a.insertAt(2, 3);        // middle -> 1 2 3 4
-    a.insertAt(a.size(), 5); // end    -> 1 2 3 4 5 (index == size is allowed)
+    a.insertAt(0, 1);
+    a.insertAt(2, 3);
+    a.insertAt(a.size(), 5);
     CHECK_EQ(a.size(), 5u);
     bool inOrder = true;
     for (std::size_t i = 0; i < a.size(); ++i)
@@ -113,12 +119,12 @@ void insertAtFrontMiddleEnd() {
 void removeAtFrontMiddleEnd() {
     DynamicArray<int> a;
     for (int i = 1; i <= 5; ++i)
-        a.pushBack(i); // 1 2 3 4 5
-    a.removeAt(0);     // 2 3 4 5
+        a.pushBack(i);
+    a.removeAt(0);
     CHECK_EQ(a[0], 2);
-    a.removeAt(1); // 2 4 5
+    a.removeAt(1);
     CHECK_EQ(a[1], 4);
-    a.removeAt(a.size() - 1); // 2 4
+    a.removeAt(a.size() - 1);
     CHECK_EQ(a.size(), 2u);
     CHECK_EQ(a.back(), 4);
     CHECK_THROWS_AS(a.removeAt(2), std::out_of_range);
@@ -134,6 +140,7 @@ void clearKeepsWorking() {
     CHECK_EQ(a[0], 5);
 }
 
+// template should work with strings too
 void worksWithStrings() {
     DynamicArray<std::string> a;
     a.pushBack("Sukkur");
@@ -156,8 +163,9 @@ void insertEmptyAndRemoveUntilEmpty() {
     CHECK_EQ(a.size(), 0u);
     CHECK_THROWS_AS(a.popBack(), std::out_of_range);
 }
-} // namespace ends
+}
 
+// called from test_main.cpp
 void runDynamicArrayTests() {
     test::section("DynamicArray");
     test::runCase("pushBackManyValues", pushBackManyValues);

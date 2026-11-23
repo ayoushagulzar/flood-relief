@@ -1,17 +1,13 @@
-// Tests for Dijkstra (lazy deletion, step-able).
+// tests for Dijkstra
 #include "test_framework.h"
 #include "core/dijkstra.h"
 #include "core/graph.h"
 
 namespace {
 
-// The paper graph. Draw it and run Dijkstra by hand before you code!
-//
-// Draw these 5 cities and 7 roads on paper (it is your viva sheet):
-//
-// Roads: A-B 4, A-C 2, B-C 1, B-D 5, C-D 8, C-E 11, D-E 2
-// Answers (all open):    A0  C2  B3  D8 (A C B D)  E10 (A C B D E)
-// Answers (B-D blocked): A0  C2  B3  D10 (A C D)   E12 (A C D E)
+// small graph that i solved on paper first
+// roads: A-B 4, A-C 2, B-C 1, B-D 5, C-D 8, C-E 11, D-E 2
+// answers: A0 C2 B3 D8 E10 (with B-D blocked: D10 E12)
 struct Paper {
     Graph g;
     int A, B, C, D, E;
@@ -31,6 +27,7 @@ struct Paper {
     }
 };
 
+// checks if path p is exactly the list we want
 bool samePath(const DynamicArray<int>& p, std::initializer_list<int> want) {
     if (p.size() != want.size()) return false;
     std::size_t i = 0;
@@ -53,6 +50,7 @@ void paperExampleAllOpen() {
     CHECK_EQ(d.visitedCount(), 5u);
 }
 
+// B-D blocked so it must go A C D E
 void blockedRoadForcesDetour() {
     Paper p;
     p.g.blockRoad(p.B, p.D);
@@ -64,9 +62,9 @@ void blockedRoadForcesDetour() {
     CHECK(samePath(d.pathTo(p.E), {p.A, p.C, p.D, p.E}));
 }
 
+// flooded B-D = 5*2.5 = 12.5 so C-D (8) is better now
 void floodingSwitchesRoute() {
     Paper p;
-    // Flood B-D: 5 * 2.5 = 12.5, so going C-D (8) is better: D = 10.
     p.g.setCondition(p.B, p.D, RoadCondition::Flooded);
     Dijkstra d(p.g);
     d.start(p.A);
@@ -75,11 +73,12 @@ void floodingSwitchesRoute() {
     CHECK(samePath(d.pathTo(p.D), {p.A, p.C, p.D}));
 }
 
+// no open road -> INF and empty path
 void unreachableIsInfinity() {
     Graph g;
     int a = g.addNode("A", NodeType::City, 0, 0);
     int b = g.addNode("B", NodeType::City, 0, 0);
-    int c = g.addNode("C", NodeType::City, 0, 0);  // no roads at all
+    int c = g.addNode("C", NodeType::City, 0, 0);
     g.addRoad(a, b, 5, RoadType::Road, "AB");
     g.blockRoad(a, b);
     Dijkstra d(g);
@@ -103,13 +102,14 @@ void sourceEqualsTarget() {
 
 void blockingOneWayBlocksBoth() {
     Paper p;
-    p.g.blockRoad(p.D, p.B);  // block from D's side
+    p.g.blockRoad(p.D, p.B);
     Dijkstra d(p.g);
-    d.start(p.B);             // B can no longer use B-D either
+    d.start(p.B);
     d.run();
-    CHECK_EQ(d.distanceTo(p.D), 9.0);  // B C D = 1 + 8
+    CHECK_EQ(d.distanceTo(p.D), 9.0);
 }
 
+// step by step should give same answer as run()
 void stepAgreesWithRun() {
     Paper p;
     Dijkstra a(p.g), b(p.g);
@@ -120,8 +120,8 @@ void stepAgreesWithRun() {
     int firstPopped = b.step();
     ++steps;
     while (b.step() != -1) ++steps;
-    CHECK_EQ(firstPopped, p.A);  // the source is always popped first
-    CHECK_EQ(steps, 5);          // one step per reachable node
+    CHECK_EQ(firstPopped, p.A);
+    CHECK_EQ(steps, 5);
     CHECK(b.isDone());
     bool same = true;
     for (int v = 0; v < 5; ++v)
@@ -141,12 +141,27 @@ void restartResetsEverything() {
     CHECK_EQ(d.visitedCount(), 5u);
 }
 
-// TODO (you): one test of your own. Idea: a "trap" graph where the first road
-// looks short but leads to a long one: S-X 1, X-T 100, S-Y 5, Y-T 5.
-// Dijkstra must answer 10 via Y, not 101 via X.
+// S-X looks short (1) but X-T is 100. answer must be 10 via Y
+void shortFirstRoadIsATrap() {
+    Graph g;
+    int s = g.addNode("S", NodeType::City, 0, 0);
+    int x = g.addNode("X", NodeType::City, 0, 0);
+    int y = g.addNode("Y", NodeType::City, 0, 0);
+    int t = g.addNode("T", NodeType::City, 0, 0);
+    g.addRoad(s, x, 1, RoadType::Road, "SX");
+    g.addRoad(x, t, 100, RoadType::Road, "XT");
+    g.addRoad(s, y, 5, RoadType::Road, "SY");
+    g.addRoad(y, t, 5, RoadType::Road, "YT");
+    Dijkstra d(g);
+    d.start(s);
+    d.run();
+    CHECK_EQ(d.distanceTo(t), 10.0);
+    CHECK(samePath(d.pathTo(t), {s, y, t}));
+}
 
-}  // namespace
+}
 
+// called from test_main.cpp
 void runDijkstraTests() {
     test::section("Dijkstra");
     test::runCase("paperExampleAllOpen", paperExampleAllOpen);
@@ -157,4 +172,5 @@ void runDijkstraTests() {
     test::runCase("blockingOneWayBlocksBoth", blockingOneWayBlocksBoth);
     test::runCase("stepAgreesWithRun", stepAgreesWithRun);
     test::runCase("restartResetsEverything", restartResetsEverything);
+    test::runCase("shortFirstRoadIsATrap", shortFirstRoadIsATrap);
 }

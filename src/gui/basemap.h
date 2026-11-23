@@ -1,17 +1,8 @@
-// basemap.h - real OpenStreetMap tiles behind the graph.
-//
-// Tile maths (Web Mercator, what OSM uses): at zoom z the world is
-// 256 x 2^z pixels and is cut into 2^z x 2^z tiles of 256 x 256.
-// Our world coordinates are pixels at the REFERENCE zoom (6), so a tile at
-// zoom z covers 256 x 2^(6 - z) world units.
-//
-// Cache: HashTable "z/x/y" -> index into DynamicArray<Tile>.
-//   disk:   cache/z/x/y.png  (downloaded once, reused forever)
-//   memory: one Texture2D per tile that has been loaded
-// Per frame we start at most 2 downloads and load at most 2 PNGs, so the
-// UI never stalls. While a tile is missing we draw its nearest loaded
-// parent tile, stretched (blurry for a moment, never an empty hole).
-#pragma once
+// this file declares Basemap -> the real OpenStreetMap tiles behind the map.
+// at zoom z the world is cut into 2^z x 2^z tiles of 256 x 256 pixels.
+// tiles are saved in cache/z/x/y.png so they download only once.
+// HashTable "z/x/y" -> index in the tiles array (my own hash table again)
+#pragma once // this prevents multiple inclusions of the header file.
 
 #include <string>
 
@@ -23,47 +14,45 @@
 
 class Basemap {
 public:
-    static constexpr int kRefZoom = 6;
+    static constexpr int kRefZoom = 6; // our map coordinates are pixels at zoom 6
     static constexpr int kMinTileZoom = 5;
-    static constexpr int kMaxTileZoom = 10;
+    static constexpr int kMaxTileZoom = 10; // tiles from zoom 5 to 10
 
     Basemap();
     ~Basemap();
-    Basemap(const Basemap&) = delete;
+    Basemap(const Basemap&) = delete; // no copies
     Basemap& operator=(const Basemap&) = delete;
 
-    void init();    // after InitWindow(): loads the pale-map shader
-    void unload();  // before CloseWindow(): frees textures + shader
+    void init(); // after the window is open
+    void unload(); // before the window closes
 
-    // Call inside BeginMode2D(cam). mapRect is the map area on screen.
-    void draw(const Camera2D& cam, Rectangle mapRect);
+    void draw(const Camera2D& cam, Rectangle mapRect); // draws all visible tiles
 
-    int tileZoomFor(float camZoom) const;
+    int tileZoomFor(float camZoom) const; // camera zoom -> tile zoom
     int loadedCount() const { return loaded_; }
     int pendingDownloads() const { return downloader_.pending(); }
 
 private:
-    enum class State { Queued, OnDisk, Loaded, Failed };
+    enum class State { Queued, OnDisk, Loaded, Failed }; // downloading -> saved -> loaded as texture
     struct Tile {
         int z = 0, x = 0, y = 0;
         State state = State::Queued;
         Texture2D texture{};
     };
 
-    static std::string keyFor(int z, int x, int y);
-    static std::string pathFor(int z, int x, int y);
+    static std::string keyFor(int z, int x, int y); // "z/x/y"
+    static std::string pathFor(int z, int x, int y); // "cache/z/x/y.png"
     static float tileWorldSize(int z);
 
-    void collectDownloads();
-    // Returns the tile index, creating the entry (and a download) if needed.
-    int ensure(int z, int x, int y, int& downloadsLeft);
-    bool drawTile(int z, int x, int y, int fromZ, int fromX, int fromY);
+    void collectDownloads(); // get finished downloads from the thread
+    int ensure(int z, int x, int y, int& downloadsLeft); // finds the tile or adds it (and starts its download)
+    bool drawTile(int z, int x, int y, int fromZ, int fromX, int fromY); // draws one tile (or a part of its parent tile)
 
-    HashTable index_;
+    HashTable index_; // "z/x/y" -> index in tiles_
     DynamicArray<Tile> tiles_;
     net::TileDownloader downloader_;
-    Shader fadeShader_{};
+    Shader fadeShader_{}; // makes the tiles pale
     bool shaderOk_ = false;
-    int loadsThisFrame_ = 0;
+    int loadsThisFrame_ = 0; // max 2 per frame so it doesn't lag
     int loaded_ = 0;
 };

@@ -1,18 +1,11 @@
-// dijkstra.h - shortest travel time from one source to every node.
-//
-// Step-able on purpose: start() / step() / isDone() instead of one big loop.
-// run() just calls step() until it returns -1. This costs nothing now and
-// lets the v2 GUI show the algorithm one node at a time.
-//
-// Lazy deletion: instead of "decrease key" (hard in a binary heap) we push
-// a NEW (dist, node) item every time a distance improves. Old items stay in
-// the heap; when one is popped and it's out of date, we just skip it.
-//
-// Total cost: O((V + E) log V). Only works because no weight is negative.
-// Implementation in dijkstra.cpp.
-#pragma once
+// this file declares Dijkstra -> shortest travel time from one place to all other places.
+// it uses lazy deletion: when a distance gets better we just push a new item in the heap,
+// and old items are skipped when they come out. total O((V + E) log V)
+
+#pragma once // this prevents multiple inclusions of the header file.
+
 #include <cstddef>
-#include <limits>
+#include <limits> // for infinity
 
 #include "core/dynamic_array.h"
 #include "core/graph.h"
@@ -20,42 +13,39 @@
 
 class Dijkstra {
 public:
+    // INF means not reachable
     static constexpr double INF = std::numeric_limits<double>::infinity();
 
     explicit Dijkstra(const Graph& g) : graph_(&g) {}
 
-    // O(V). Reset dist (INF), prev (-1), visited (false) for every node, clear
-    // the heap, set dist[source] = 0 and push {0, source}. Throws on bad source.
-    void start(int source);
-    // O(degree log V). Pop until a non-stale item, relax its edges, return its id.
-    // Returns -1 when the heap is empty (finished).
-    int step();
+    // can run step by step: start() then step() until it returns -1
+    void start(int source); // reset everything, dist[source] = 0
+    int step();             // settles one node and returns it, -1 when finished
     bool isDone() const { return !started_ || heap_.isEmpty(); }
-    // O((V + E) log V). Calls step() until it returns -1.
-    void run();
+    void run();             // calls step() until finished
 
-    // O(1). INF if unreachable. Throws if start() was never called.
-    double distanceTo(int v) const;
-    // O(path length). source ... v, or EMPTY if v is unreachable.
-    DynamicArray<int> pathTo(int v) const;
+    double distanceTo(int v) const;            // INF if unreachable
+    DynamicArray<int> pathTo(int v) const;     // source ... v (empty if unreachable)
     bool reachable(int v) const { return distanceTo(v) != INF; }
     std::size_t visitedCount() const { return visitedCount_; }
     bool isVisited(int v) const;
     int source() const { return source_; }
 
 private:
+    // one item in the heap
     struct Item {
         double dist;
         int node;
     };
+    // smaller distance comes out first
     struct CloserFirst {
         bool operator()(const Item& a, const Item& b) const { return a.dist < b.dist; }
     };
 
     const Graph* graph_;
-    DynamicArray<double> dist_;
-    DynamicArray<int> prev_;
-    DynamicArray<bool> visited_;
+    DynamicArray<double> dist_;        // best distance found so far
+    DynamicArray<int> prev_;           // previous node on the path (to make the path later)
+    DynamicArray<bool> visited_;       // true = distance is final
     MinHeap<Item, CloserFirst> heap_;
     std::size_t visitedCount_ = 0;
     int source_ = -1;

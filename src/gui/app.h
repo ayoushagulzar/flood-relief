@@ -1,23 +1,8 @@
-// app.h - the GUI application: window, layout, game loop, tools and panels.
-//
-// Immediate mode: every frame we read input, update, and redraw EVERYTHING
-// from the manager's current state. No widget objects to keep in sync:
-// ReliefManager is the only source of truth.
-//
-// Screen:
-//   +---------+---------------------------------------+-------------+
-//   |         | search | Next | Serve all | tools      |             |
-//   | sidebar +---------------------------------------+ right panel |
-//   | (pages) | scenario title             tool hint  | (the page   |
-//   |         | [            map card             ]   |  chosen in  |
-//   |         | Today's highlights: 4 KPI cards       |  sidebar)   |
-//   +---------+---------------------------------------+-------------+
-//
-// Code is split over two files:
-//   app.cpp    - window, layout, map, tools, sidebar, top bar, search, KPIs
-//   panels.cpp - right panel pages (Overview, Queue, Depots, Why, Events)
-//                and the Add-request form
-#pragma once
+// this file declares App -> the whole GUI window.
+// immediate mode: every frame we read the mouse/keys and draw everything again
+// from the ReliefManager, so the screen always shows the latest data.
+// app.cpp = window, map, sidebar, top bar, search. panels.cpp = right panel pages
+#pragma once // this prevents multiple inclusions of the header file.
 
 #include <memory>
 #include <string>
@@ -29,20 +14,20 @@
 #include "relief/relief_manager.h"
 #include "relief/scenario_loader.h"
 
+// rectangles of each part of the screen
 struct Layout {
     Rectangle sidebar, topBar, header, map, kpis, rightPanel;
 };
 
-// The current tool is a tiny state machine. It lives HERE (in App), the
-// map only reports "clicked at this point"; App decides what that means.
+// what a click on the map does
 enum class Tool { Select, BlockRoad, AddRequest };
-// What the right panel shows (picked in the sidebar).
+// which page the right panel shows
 enum class Page { Overview, Queue, Depots, Why, Events };
 
-// What the Add-request form is editing (only used while Tool::AddRequest).
+// values of the add request form
 struct AddForm {
     int locationId = -1;
-    int supply = 1;  // index into Supply (0 food, 1 water, 2 medicine, 3 shelter)
+    int supply = 1; // 0 food, 1 water, 2 medicine, 3 shelter
     int quantity = 300;
     int urgency = 3;
     int people = 2000;
@@ -52,14 +37,14 @@ struct AddForm {
 
 class App {
 public:
-    int run();  // opens the window, runs until closed, returns the exit code
+    int run(); // opens the window and runs until it is closed
 
 private:
-    static Layout computeLayout(float w, float h);
-    void loadScenario();
-    void frame();
+    static Layout computeLayout(float w, float h); // window size -> rectangles
+    void loadScenario(); // also used by the Reset button
+    void frame(); // one frame: input, update, draw
 
-    // ---- app.cpp ----
+    // ---- in app.cpp ----
     void updateMap(bool mouseOverUI);
     void handleMapClick();
     void processNext();
@@ -73,14 +58,13 @@ private:
     void drawKpis(Rectangle r);
     void drawInfoCard();
     Rectangle infoCardRect() const;
-    // search box
     Rectangle searchRect() const;
     void updateSearch();
     void drawSearch();
     void findMatches(DynamicArray<int>& out) const;
     void selectAndShow(int nodeId);
 
-    // ---- panels.cpp ----
+    // ---- in panels.cpp ----
     void drawRightPanel(Rectangle r);
     void drawOverviewPage(Rectangle r);
     void drawQueuePage(Rectangle r);
@@ -90,29 +74,29 @@ private:
     void drawAddForm(Rectangle r);
     std::string nextRequestId() const;
 
-    std::unique_ptr<ReliefManager> manager_;  // unique_ptr: "Reset" builds a fresh one
+    std::unique_ptr<ReliefManager> manager_; // unique_ptr so Reset can make a new one
     LoadResult load_;
     std::string scenarioPath_ = "data/pakistan.txt";
     Fonts fonts_;
     MapView map_;
     Layout layout_{};
 
-    Tool tool_ = Tool::Select;
-    Page page_ = Page::Overview;
+    Tool tool_ = Tool::Select; // current tool
+    Page page_ = Page::Overview; // current page
     AddForm form_;
 
-    int hoverNode_ = -1, hoverU_ = -1, hoverV_ = -1;
-    int selNode_ = -1, selU_ = -1, selV_ = -1;
-    int panelHoverNode_ = -1;  // row under the mouse in a panel -> highlight on map
-    int lastPanelHover_ = -1;  // ... as it was last frame (the map is drawn first)
+    int hoverNode_ = -1, hoverU_ = -1, hoverV_ = -1; // under the mouse (-1 = nothing)
+    int selNode_ = -1, selU_ = -1, selV_ = -1; // clicked / selected
+    int panelHoverNode_ = -1; // row under the mouse in the panel (highlighted on the map)
+    int lastPanelHover_ = -1;
 
-    bool searchFocus_ = false;
+    bool searchFocus_ = false; // true while typing in search
     std::string searchText_;
 
-    double pulseStart_ = -100.0;  // GetTime() when the last request was served
+    double pulseStart_ = -100.0; // time when the last place was served (for the pulse)
     int pulseNode_ = -1;
-    float listScroll_ = 0, depotScroll_ = 0, whyScroll_ = 0, logScroll_ = 0;
-    int initialMax_[kSupplyCount] = {1, 1, 1, 1};  // largest stock at load time (bar scale)
+    float listScroll_ = 0, depotScroll_ = 0, whyScroll_ = 0, logScroll_ = 0; // scroll of each page
+    int initialMax_[kSupplyCount] = {1, 1, 1, 1}; // biggest stock at start (for the bar length)
     std::string tooltip_;
     Vector2 tooltipPos_{0, 0};
 };

@@ -1,10 +1,11 @@
-// http.cpp - WinINet tile downloads on a worker thread. Never includes raylib.
+// this file has the code of TileDownloader (WinINet + a background thread). no raylib here
 #include "net/http.h"
 
 #include <cstdio>
-#include <filesystem>
+#include <filesystem> // to make folders and rename files
 #include <system_error>
 
+// windows internet library (only on windows)
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -15,10 +16,12 @@
 
 namespace net {
 
+// constructor starts the thread right away
 TileDownloader::TileDownloader(const std::string& userAgent) : userAgent_(userAgent) {
     worker_ = std::thread(&TileDownloader::workerLoop, this);
 }
 
+// tell the thread to stop, wake it up and wait for it (join)
 TileDownloader::~TileDownloader() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -28,6 +31,7 @@ TileDownloader::~TileDownloader() {
     if (worker_.joinable()) worker_.join();
 }
 
+// lock_guard locks the mutex and unlocks it automatically at the end of { }
 void TileDownloader::enqueue(const DownloadJob& job) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -41,14 +45,16 @@ int TileDownloader::pending() const {
     return static_cast<int>(jobs_.size()) + running_;
 }
 
+// oldest result first
 bool TileDownloader::popResult(DownloadResult& out) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (results_.isEmpty()) return false;
     out = results_[0];
-    results_.removeAt(0);  // O(n), but n is tiny (a few tiles)
+    results_.removeAt(0);
     return true;
 }
 
+// thread loop: wait for a job -> download -> save result -> repeat
 void TileDownloader::workerLoop() {
     for (;;) {
         DownloadJob job;
@@ -60,8 +66,7 @@ void TileDownloader::workerLoop() {
             jobs_.removeAt(0);
             ++running_;
         }
-        // The slow part runs WITHOUT the lock, so the GUI never waits for it.
-        bool ok = downloadToFile(job.url, job.path, userAgent_);
+        bool ok = downloadToFile(job.url, job.path, userAgent_); // slow part is done without the lock
         {
             std::lock_guard<std::mutex> lock(mutex_);
             --running_;
@@ -76,11 +81,11 @@ void TileDownloader::workerLoop() {
 #ifdef _WIN32
 bool downloadToFile(const std::string& url, const std::string& path, const std::string& userAgent) {
     std::error_code ec;
-    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec); // make cache/z/x folder
 
     HINTERNET net = InternetOpenA(userAgent.c_str(), INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
     if (!net) return false;
-    DWORD timeoutMs = 8000;
+    DWORD timeoutMs = 8000; // 8 seconds max
     InternetSetOptionA(net, INTERNET_OPTION_CONNECT_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
     InternetSetOptionA(net, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
 
@@ -91,17 +96,15 @@ bool downloadToFile(const std::string& url, const std::string& path, const std::
         return false;
     }
 
-    // Only accept HTTP 200 (a 403/429 page is not a PNG).
     DWORD status = 0, len = sizeof(status);
     HttpQueryInfoA(file, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status, &len, nullptr);
-    bool ok = (status == 200);
+    bool ok = (status == 200); // only 200 = OK
 
-    // Write to a .part file first, then rename: a half-written PNG never
-    // sits in the cache if the app closes in the middle of a download.
-    std::string tmp = path + ".part";
+    std::string tmp = path + ".part"; // write to .part first so half files don't stay in the cache
     FILE* out = ok ? std::fopen(tmp.c_str(), "wb") : nullptr;
     if (!out) ok = false;
 
+    // read 8 KB at a time
     char buffer[8192];
     DWORD got = 0;
     long total = 0;
@@ -113,6 +116,7 @@ bool downloadToFile(const std::string& url, const std::string& path, const std::
     InternetCloseHandle(file);
     InternetCloseHandle(net);
 
+    // worked -> rename .part to .png, else delete .part
     if (ok && total > 0) {
         std::filesystem::rename(tmp, path, ec);
         if (!ec) return true;
@@ -122,8 +126,8 @@ bool downloadToFile(const std::string& url, const std::string& path, const std::
 }
 #else
 bool downloadToFile(const std::string&, const std::string&, const std::string&) {
-    return false;  // no WinINet here: the map just shows without tiles
+    return false;
 }
 #endif
 
-}  // namespace net
+}

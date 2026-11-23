@@ -1,8 +1,10 @@
-// types.cpp - names and formatting helpers. (Finished plumbing.)
+// this file has the helper functions declared in types.h
 #include "relief/types.h"
 
-#include <cctype>
-#include <cmath>
+#include <cctype> // for tolower
+#include <cmath>  // for lround
+
+//==================== enum -> text ===========================
 
 const char* supplyName(Supply s) {
     switch (s) {
@@ -40,6 +42,9 @@ const char* eventTypeName(EventType t) {
     return "?";
 }
 
+//==================== text -> enum ===========================
+
+// "Water" -> Supply::Water (not case sensitive). false if word is unknown
 bool parseSupply(const std::string& text, Supply& out) {
     std::string t;
     for (char c : text) t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -52,6 +57,9 @@ bool parseSupply(const std::string& text, Supply& out) {
     return false;
 }
 
+//==================== formatting ===========================
+
+// 160 -> "2 h 40 min"
 std::string formatMinutes(double minutes) {
     int total = static_cast<int>(std::lround(minutes));
     int h = total / 60;
@@ -61,6 +69,7 @@ std::string formatMinutes(double minutes) {
     return std::to_string(h) + " h " + std::to_string(m) + " min";
 }
 
+// 1200 -> "1,200" (adds a comma after every 3 digits from the right)
 std::string formatNumber(int n) {
     std::string digits = std::to_string(n < 0 ? -n : n);
     std::string out;
@@ -72,9 +81,9 @@ std::string formatNumber(int n) {
     return n < 0 ? "-" + out : out;
 }
 
+// minutes -> "Day 1 08:00" style clock
 std::string formatClock(int minutes) {
-    // Scenario starts at Day 1, 08:00.
-    int t = minutes + 8 * 60;
+    int t = minutes + 8 * 60; // scenario starts at 08:00
     int day = t / (24 * 60) + 1;
     int h = (t / 60) % 24;
     int m = t % 60;

@@ -1,90 +1,87 @@
-// theme.h - every colour and size the GUI uses. Nothing is hard-coded elsewhere.
-//
-// Look: "Burgundy dashboard". A dark burgundy sidebar, a white work area,
-// soft rounded cards, and a light map. Colours carry meaning:
-//   burgundy  = the app itself (buttons, bars, selection)
-//   orange    = needs attention (urgent request, closed road, deferred)
-//   blue      = water (flooded road), green = served
-#pragma once
+// this file has all the colours and sizes of the GUI in one place.
+// if i want to change the look i only change this file.
+#pragma once // this prevents multiple inclusions of the header file.
 
 #include "raylib.h"
 
+// namespace so the names don't clash with raylib names
 namespace theme {
 
-// ---------- layout (pixels) ----------
+// ================ sizes (in pixels) ================
 constexpr float kSidebar = 220;
 constexpr float kTopBar = 66;
 constexpr float kRightPanel = 350;
-constexpr float kKpiH = 100;     // "Today's highlights" cards under the map
-constexpr float kPad = 8;        // 8 px spacing everywhere
-constexpr float kGap = 16;       // 2 x kPad
-constexpr float kRadius = 10;    // card corners
-constexpr float kLine = 1;       // hairline thickness
+constexpr float kKpiH = 100; // height of the cards under the map
+constexpr float kPad = 8; // small spacing
+constexpr float kGap = 16;
+constexpr float kRadius = 10; // rounded corners
+constexpr float kLine = 1;
 constexpr int kWindowW = 1280;
 constexpr int kWindowH = 720;
 
-// ---------- type (Poppins, OFL) ----------
+// ================ text sizes ================
 constexpr float kSmall = 16;
 constexpr float kBody = 18;
 constexpr float kTitle = 28;
-constexpr float kCapsSpacing = 1.0f;  // letter spacing for small UPPERCASE tags
+constexpr float kCapsSpacing = 1.0f;
 constexpr float kTextSpacing = 0.0f;
 
-// ---------- brand (burgundy) ----------
-constexpr Color kBrand{46, 18, 24, 255};       // #2E1218 sidebar, primary button
-constexpr Color kBrand2{67, 27, 35, 255};      // #431B23 active sidebar row
-constexpr Color kAccent{140, 47, 63, 255};     // #8C2F3F bars, tiles, selection
+// ================ colours ================
+// Color{r, g, b, alpha}. burgundy = main colour of the app
+constexpr Color kBrand{46, 18, 24, 255};
+constexpr Color kBrand2{67, 27, 35, 255};
+constexpr Color kAccent{140, 47, 63, 255};
 constexpr Color kAccentHover{160, 62, 79, 255};
-constexpr Color kAccentSoft{224, 188, 194, 255};  // #E0BCC2
-constexpr Color kAccentTint{245, 232, 234, 255};  // #F5E8EA bar track, active tool
-constexpr Color kSideText{224, 198, 202, 255};    // inactive sidebar text
+constexpr Color kAccentSoft{224, 188, 194, 255};
+constexpr Color kAccentTint{245, 232, 234, 255};
+constexpr Color kSideText{224, 198, 202, 255};
 
-// ---------- surfaces ----------
+// backgrounds
 constexpr Color kBackground{255, 255, 255, 255};
-constexpr Color kPanel{252, 250, 250, 255};    // right panel
-constexpr Color kField{250, 245, 246, 255};    // search box, dashed areas
+constexpr Color kPanel{252, 250, 250, 255};
+constexpr Color kField{250, 245, 246, 255};
 constexpr Color kCard{255, 255, 255, 255};
 constexpr Color kHover{248, 240, 241, 255};
 constexpr Color kPressed{240, 226, 229, 255};
-constexpr Color kRule{238, 226, 228, 255};     // #EEE2E4 card borders, dividers
+constexpr Color kRule{238, 226, 228, 255};
 constexpr Color kRuleSoft{245, 237, 238, 255};
-constexpr Color kOverlay{255, 255, 255, 235};  // legend / info cards over the map
+constexpr Color kOverlay{255, 255, 255, 235};
 constexpr Color kShadow{46, 18, 24, 22};
 
-// ---------- text ----------
-constexpr Color kText{42, 21, 25, 255};        // #2A1519
-constexpr Color kMuted{122, 98, 102, 255};     // #7A6266
+// text colours
+constexpr Color kText{42, 21, 25, 255};
+constexpr Color kMuted{122, 98, 102, 255};
 constexpr Color kFaint{170, 150, 154, 255};
 
-// ---------- signal colours ----------
-constexpr Color kAlert{217, 122, 28, 255};     // #D97A1C urgent / closed / deferred
-constexpr Color kRoute{46, 18, 24, 255};       // last delivery route (dark burgundy)
+// status colours (orange = needs attention, blue = flooded, green = served)
+constexpr Color kAlert{217, 122, 28, 255};
+constexpr Color kRoute{46, 18, 24, 255};
 constexpr Color kRouteCasing{255, 255, 255, 255};
 constexpr Color kBlocked = kAlert;
-constexpr Color kFlooded{61, 125, 216, 255};   // water blue
-constexpr Color kDamaged{176, 137, 0, 255};    // mustard
+constexpr Color kFlooded{61, 125, 216, 255};
+constexpr Color kDamaged{176, 137, 0, 255};
 constexpr Color kFulfilled{46, 139, 87, 255};
 constexpr Color kPartial{201, 138, 27, 255};
 constexpr Color kDeferred = kAlert;
 constexpr Color kPending{170, 150, 154, 255};
 
-// ---------- map ----------
-constexpr Color kMapBackground{243, 236, 237, 255};  // neighbours (offline)
-constexpr Color kLand{255, 255, 255, 255};           // Pakistan (offline)
+// map colours
+constexpr Color kMapBackground{243, 236, 237, 255};
+constexpr Color kLand{255, 255, 255, 255};
 constexpr Color kSea{216, 224, 228, 255};
 constexpr Color kBorderLine{208, 184, 188, 255};
 constexpr Color kGraticule{234, 222, 224, 255};
-constexpr Color kRoad{185, 122, 132, 255};           // #B97A84
-constexpr Color kMotorway{140, 47, 63, 255};         // #8C2F3F
+constexpr Color kRoad{185, 122, 132, 255};
+constexpr Color kMotorway{140, 47, 63, 255};
 constexpr Color kCity{85, 57, 62, 255};
 constexpr Color kDepot{46, 18, 24, 255};
 constexpr Color kShelter{46, 18, 24, 255};
 constexpr Color kLabel{62, 42, 46, 255};
-constexpr Color kHalo{255, 255, 255, 235};           // outline behind map labels
-constexpr float kLabelZoom = 1.6f;                   // camera zoom above which labels show
-constexpr float kTileFade = 0.6f;                    // 0 = OSM colours, 1 = white
+constexpr Color kHalo{255, 255, 255, 235};
+constexpr float kLabelZoom = 1.6f; // labels show after this zoom
+constexpr float kTileFade = 0.6f; // how pale the map tiles are
 
-// Urgency 1..5: grey -> burgundy -> orange.
+// urgency 1..5 -> grey to orange
 inline Color urgencyColor(int u) {
     switch (u) {
         case 1: return Color{190, 172, 175, 255};
@@ -95,4 +92,4 @@ inline Color urgencyColor(int u) {
     }
 }
 
-}  // namespace theme
+}

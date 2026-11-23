@@ -1,9 +1,9 @@
-// dijkstra.cpp - shortest travel times with lazy deletion (see dijkstra.h).
+// this file has the code of Dijkstra's algorithm
 #include "core/dijkstra.h"
 
 #include <stdexcept>
 
-// O(V). Resets every array so the same object can be reused for a new source.
+// resets all arrays so the same object can be used again
 void Dijkstra::start(int source) {
     if (!graph_->isValid(source)) throw std::out_of_range("Dijkstra: invalid source");
     const std::size_t n = graph_->nodeCount();
@@ -23,38 +23,32 @@ void Dijkstra::start(int source) {
     heap_.push({0.0, source});
 }
 
-// O(degree(u) log V) for the node it settles. Returns that node, or -1 when
-// the heap is empty (everything reachable is settled).
 int Dijkstra::step() {
     while (!heap_.isEmpty()) {
-        Item it = heap_.pop();
+        Item it = heap_.pop(); // closest node
         const std::size_t u = static_cast<std::size_t>(it.node);
-        // Lazy deletion: when a distance improves we push a NEW item instead of
-        // updating the old one, so old (bigger) items are still in the heap.
-        // If this item is out of date, or u is already settled, skip it.
+        // lazy deletion -> skip old items (already visited or distance is outdated)
         if (visited_[u] || it.dist > dist_[u]) continue;
         visited_[u] = true;
         ++visitedCount_;
         const DynamicArray<Edge>& edges = graph_->neighbors(it.node);
         for (std::size_t i = 0; i < edges.size(); ++i) {
             const Edge& e = edges[i];
-            if (e.blocked) continue;  // blocked roads cannot be used at all
+            if (e.blocked) continue; // can't use blocked roads
             const std::size_t v = static_cast<std::size_t>(e.to);
             double nd = it.dist + e.weight();
-            // Relax the edge: going through u is faster than the best route
-            // to v found so far -> remember it and where we came from.
+            // relax -> if going through u is faster, update v
             if (nd < dist_[v]) {
                 dist_[v] = nd;
                 prev_[v] = it.node;
                 heap_.push({nd, e.to});
             }
         }
-        return it.node;  // one settled node per step (the GUI inspector shows these)
+        return it.node;
     }
     return -1;
 }
 
-// O((V + E) log V) in total.
 void Dijkstra::run() {
     while (step() != -1) {
     }
@@ -71,8 +65,7 @@ bool Dijkstra::isVisited(int v) const {
     return visited_[static_cast<std::size_t>(v)];
 }
 
-// O(path length). prev_ points backwards (v -> ... -> source), so we collect
-// the nodes and then reverse them into source -> ... -> v.
+// prev_ goes backwards (v -> source) so we collect it and then reverse it
 DynamicArray<int> Dijkstra::pathTo(int v) const {
     DynamicArray<int> path;
     if (distanceTo(v) == INF) return path;

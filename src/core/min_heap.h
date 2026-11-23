@@ -1,43 +1,37 @@
-// MinHeap.h - a binary heap stored in your DynamicArray (no pointers).
-//
-// "Min" means: the element that should come out FIRST sits at index 0.
-// What "first" means is decided by the Compare type:
-//   Less<int>          -> smallest number first (normal min-heap)
-//   a custom struct    -> e.g. highest priority request first
-// Compare must have:  bool operator()(const T& a, const T& b) const
-// answering "should a come out before b?".
-//
-// Index maths for a complete binary tree in an array:
-//   parent(i) = (i - 1) / 2      left(i) = 2i + 1      right(i) = 2i + 2
-//
-// Used later by: Dijkstra (closest node first) and ReliefManager (most
-// urgent request first). Templates -> everything stays in this .h file.
-#pragma once
+// this file defines MinHeap (binary heap) stored inside my DynamicArray.
+// the element that should come out first is always at index 0.
+// used by Dijkstra (closest node first) and ReliefManager (most urgent request first)
+
+#pragma once // this prevents multiple inclusions of the header file.
 
 #include <cstddef>
 #include <stdexcept>
 
 #include "core/dynamic_array.h"
 
-// Default comparator: a comes before b if a < b. (Finished, nothing to do.)
+// default comparator -> smaller value comes first (normal min heap)
 template <typename T>
 struct Less {
     bool operator()(const T& a, const T& b) const { return a < b; }
 };
 
+// Compare decides who comes first. it answers: should a come out before b?
+// we pass our own Compare for requests / dijkstra items
 template <typename T, typename Compare = Less<T>>
 class MinHeap {
 public:
     MinHeap() = default;
+    //explicit = stops the compiler from using this constructor for automatic conversions
     explicit MinHeap(Compare cmp) : cmp_(cmp) {}
 
-    // O(log n). Append at the end, then sift up.
+    // add at the end then move it up. O(log n)
     void push(const T& value) {
         data_.pushBack(value);
         siftUp(data_.size() - 1);
     }
 
-    // O(log n). Removes and returns the best element. Throws if empty.
+    // removes and returns the top. O(log n)
+    // last element goes to the top and then moves down
     T pop() {
         if (data_.isEmpty()) {
             throw std::out_of_range("MinHeap::pop on empty heap");
@@ -51,7 +45,7 @@ public:
         return topValue;
     }
 
-    // O(1). Best element without removing it. Throws if empty.
+    // look at the top without removing it. O(1)
     const T& top() const {
         if (data_.isEmpty()) {
             throw std::out_of_range("MinHeap::top on empty heap");
@@ -59,30 +53,29 @@ public:
         return data_[0];
     }
 
-    // O(1)
     std::size_t size() const { return data_.size(); }
-    // Read-only look at array slot i (0 = top). Used by the CLI `queue`
-    // command to print the heap as it is stored. Throws if i is out of range.
+    // read only access to slot i (cli "queue" command uses it to print the heap)
     const T& at(std::size_t i) const { return data_.at(i); }
-    // O(1)
     bool isEmpty() const { return data_.isEmpty(); }
-    // O(1)
     void clear() { data_.clear(); }
 
 private:
-    // O(log n). Move element i UP while it should come before its parent.
+    // index formulas -> parent = (i-1)/2, left = 2i+1, right = 2i+2
+
+    // moves element i up while it is better than its parent
     void siftUp(std::size_t i) {
         while (i > 0) {
             std::size_t parent = (i - 1) / 2;
             if (!cmp_(data_[i], data_[parent])) {
-                break;
+                break; // parent is already better so stop
             }
             swapAt(i, parent);
             i = parent;
         }
     }
 
-    // O(log n). Move element i DOWN while a child should come before it.
+    // moves element i down while a child is better.
+    // always swap with the BETTER child, otherwise the heap order breaks
     void siftDown(std::size_t i) {
         while (true) {
             std::size_t left = 2 * i + 1;
@@ -96,20 +89,20 @@ private:
                 best = right;
             }
             if (best == i) {
-                break;
+                break; // already in right place
             }
             swapAt(i, best);
             i = best;
         }
     }
 
-    // O(1). Finished: swaps two slots.
+    // swaps two elements
     void swapAt(std::size_t a, std::size_t b) {
         T tmp = data_[a];
         data_[a] = data_[b];
         data_[b] = tmp;
     }
 
-    DynamicArray<T> data_;
+    DynamicArray<T> data_; // the heap is stored level by level in this array
     Compare cmp_{};
 };

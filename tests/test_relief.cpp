@@ -1,4 +1,4 @@
-// Integration tests for ReliefManager with a small hard-coded scenario.
+// tests for ReliefManager using a very small world
 #include <string>
 
 #include "test_framework.h"
@@ -6,8 +6,8 @@
 
 namespace {
 
-// Village --N-55 (10)-- Town --N-5 (20)-- Depot A        (A is 30 min away)
-// Village --M-9 (90)----------------------- Depot B      (B is 90 min away)
+// Village --N-55 (10)-- Town --N-5 (20)-- Depot A   (30 min)
+// Village --M-9 (90)--------------------- Depot B   (90 min)
 struct World {
     ReliefManager m;
     int village, town, depotA, depotB;
@@ -37,8 +37,10 @@ struct World {
     }
 };
 
+// true if part is inside text
 bool contains(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
 
+// 4*100 + 1200/100 + 50 = 462
 void baseScoreFormula() {
     Request r;
     r.urgency = 4;
@@ -58,18 +60,20 @@ void mostUrgentGoesFirst() {
     CHECK(w.m.processNext().requestId == "high");
     CHECK(w.m.processNext().requestId == "mid");
     CHECK(w.m.processNext().requestId == "low");
-    CHECK(!w.m.processNext().valid);  // queue empty
+    CHECK(!w.m.processNext().valid);
 }
 
+// old: 201 - 0 = 201, new: 301 - 2*60 = 181 so old one goes first
 void agingLetsOldRequestsWin() {
     World w;
     w.stock(w.depotA, Supply::Water, 1000);
-    w.request("old", Supply::Water, 10, 2);  // base 201, arrives at 0  -> key 201
+    w.request("old", Supply::Water, 10, 2);
     w.m.advanceTime(60);
-    w.request("new", Supply::Water, 10, 3);  // base 301, arrives at 60 -> key 181
+    w.request("new", Supply::Water, 10, 3);
     CHECK(w.m.processNext().requestId == "old");
 }
 
+// greedy: 100 from A (nearest) and the other 50 from B
 void nearestDepotFirstThenNext() {
     World w;
     w.stock(w.depotA, Supply::Water, 100);
@@ -78,11 +82,11 @@ void nearestDepotFirstThenNext() {
     Decision d = w.m.processNext();
     CHECK(d.status == Status::Fulfilled);
     CHECK_EQ(d.legs.size(), 2u);
-    CHECK_EQ(d.legs.at(0).depotNodeId, w.depotA);  // nearest first
+    CHECK_EQ(d.legs.at(0).depotNodeId, w.depotA);
     CHECK_EQ(d.legs.at(0).quantity, 100);
     CHECK_EQ(d.legs.at(0).minutes, 30.0);
     CHECK(d.legs.at(0).via == "N-5, N-55");
-    CHECK_EQ(d.legs.at(0).path.size(), 3u);         // Depot A -> Town -> Village
+    CHECK_EQ(d.legs.at(0).path.size(), 3u);
     CHECK_EQ(d.legs.at(0).path.at(0), w.depotA);
     CHECK_EQ(d.legs.at(1).depotNodeId, w.depotB);
     CHECK_EQ(d.legs.at(1).quantity, 50);
@@ -98,8 +102,8 @@ void skippedDepotReasons() {
     w.stock(w.depotA, Supply::Water, 100);
     w.stock(w.depotB, Supply::Water, 100);
     w.stock(w.depotB, Supply::Food, 100);
-    w.request("W", Supply::Water, 10, 5);   // A is enough -> B "farther"
-    w.request("F", Supply::Food, 10, 4);    // A has no food
+    w.request("W", Supply::Water, 10, 5);
+    w.request("F", Supply::Food, 10, 4);
     Decision d1 = w.m.processNext();
     CHECK_EQ(d1.skipped.size(), 1u);
     CHECK_EQ(d1.skipped.at(0).depotNodeId, w.depotB);
@@ -112,6 +116,7 @@ void skippedDepotReasons() {
     CHECK(contains(d1.explanation, "1 farther depot(s) not needed"));
 }
 
+// not enough stock -> partial, no stock -> deferred
 void partialAndDeferred() {
     World w;
     w.stock(w.depotB, Supply::Water, 450);
@@ -132,20 +137,18 @@ void partialAndDeferred() {
     CHECK_EQ(st.unmet[supplyIndex(Supply::Water)], 150);
 }
 
-// A partial request is retried, but no depot has more stock: the sentence
-// must say "nothing new this time" instead of an empty list (": ;").
+// retry with no new stock should say "nothing new this time"
 void partialRetryWithNothingNew() {
     World w;
     w.stock(w.depotB, Supply::Water, 450);
     w.request("P", Supply::Water, 600, 3);
-    w.m.processNext();                         // 450 of 600 -> partial
-    w.m.reopenRoad(w.village, w.town);         // any world change retries deferred requests
+    w.m.processNext();
+    w.m.reopenRoad(w.village, w.town);
     Decision again = w.m.processNext();
     CHECK(again.status == Status::PartiallyFulfilled);
     CHECK(again.legs.isEmpty());
     CHECK(contains(again.explanation, "got 450 of 600 water so far (nothing new this time)"));
     CHECK(!contains(again.explanation, ": ;"));
-    // the retry event names the request that moved back into the queue
     bool named = false;
     const DynamicArray<Event>& ev = w.m.events();
     for (std::size_t i = 0; i < ev.size(); ++i)
@@ -154,7 +157,7 @@ void partialRetryWithNothingNew() {
     CHECK(named);
 }
 
-// queueSnapshot() is the heap array: index 0 is the request processNext() takes.
+// slot 0 of the heap is the one served next
 void queueSnapshotTopIsNext() {
     World w;
     w.stock(w.depotA, Supply::Water, 1000);
@@ -164,7 +167,7 @@ void queueSnapshotTopIsNext() {
     DynamicArray<int> q = w.m.queueSnapshot();
     CHECK_EQ(q.size(), 3u);
     CHECK(w.m.requests()[static_cast<std::size_t>(q[0])].id == "HIGH");
-    for (std::size_t i = 1; i < q.size(); ++i) {  // heap order: parent key >= child key
+    for (std::size_t i = 1; i < q.size(); ++i) {
         double parent = ReliefManager::heapKey(w.m.requests()[static_cast<std::size_t>(q[(i - 1) / 2])]);
         CHECK(parent >= ReliefManager::heapKey(w.m.requests()[static_cast<std::size_t>(q[i])]));
     }
@@ -172,15 +175,16 @@ void queueSnapshotTopIsNext() {
     CHECK_EQ(w.m.queueSnapshot().size(), 2u);
 }
 
+// block road -> uses far depot. reopen -> deferred request is tried again
 void blockChangesRouteReopenRetries() {
     World w;
     w.stock(w.depotA, Supply::Water, 100);
     w.stock(w.depotB, Supply::Water, 100);
-    w.m.blockRoad(w.village, w.town);  // cuts Depot A off
+    w.m.blockRoad(w.village, w.town);
     w.request("R1", Supply::Water, 50, 5);
     Decision d1 = w.m.processNext();
     CHECK_EQ(d1.legs.size(), 1u);
-    CHECK_EQ(d1.legs.at(0).depotNodeId, w.depotB);  // rerouted to the far depot
+    CHECK_EQ(d1.legs.at(0).depotNodeId, w.depotB);
     CHECK(d1.legs.at(0).via == "M-9");
     bool aUnreachable = false;
     for (std::size_t i = 0; i < d1.skipped.size(); ++i)
@@ -188,12 +192,12 @@ void blockChangesRouteReopenRetries() {
             aUnreachable = true;
     CHECK(aUnreachable);
 
-    w.request("R2", Supply::Water, 100, 4);  // B has 50 left, A unreachable
+    w.request("R2", Supply::Water, 100, 4);
     Decision d2 = w.m.processNext();
     CHECK(d2.status == Status::PartiallyFulfilled);
     CHECK_EQ(w.m.deferredCount(), 1u);
 
-    CHECK(w.m.reopenRoad(w.village, w.town));  // retry queues R2 again
+    CHECK(w.m.reopenRoad(w.village, w.town));
     CHECK_EQ(w.m.deferredCount(), 0u);
     CHECK(w.m.hasPending());
     Decision d3 = w.m.processNext();
@@ -211,6 +215,7 @@ void addStockRetries() {
     CHECK(w.m.stats().fulfilled == 1);
 }
 
+// 10 min per decision, average wait = (0 + 10) / 2 = 5
 void clockAdvancesPerDecision() {
     World w;
     w.stock(w.depotA, Supply::Food, 100);
@@ -219,7 +224,7 @@ void clockAdvancesPerDecision() {
     w.m.processNext();
     w.m.processNext();
     CHECK_EQ(w.m.now(), 2 * ReliefManager::kDispatchMinutes);
-    CHECK_EQ(w.m.stats().averageWaitMinutes, 5.0);  // waited 0 and 10 minutes
+    CHECK_EQ(w.m.stats().averageWaitMinutes, 5.0);
 }
 
 void processAllEmptiesQueue() {
@@ -234,16 +239,16 @@ void processAllEmptiesQueue() {
 void badRequestsThrow() {
     World w;
     w.request("X", Supply::Food, 10, 3);
-    CHECK_THROWS_AS(w.request("X", Supply::Food, 10, 3), std::invalid_argument);  // duplicate
-    CHECK_THROWS_AS(w.request("Y", Supply::Food, 0, 3), std::invalid_argument);   // quantity 0
-    CHECK_THROWS_AS(w.request("Z", Supply::Food, 10, 6), std::invalid_argument);  // urgency 6
+    CHECK_THROWS_AS(w.request("X", Supply::Food, 10, 3), std::invalid_argument);
+    CHECK_THROWS_AS(w.request("Y", Supply::Food, 0, 3), std::invalid_argument);
+    CHECK_THROWS_AS(w.request("Z", Supply::Food, 10, 6), std::invalid_argument);
     Request bad;
     bad.id = "L";
     bad.locationId = 99;
     bad.quantity = 1;
     bad.urgency = 1;
-    CHECK_THROWS_AS(w.m.addRequest(bad), std::invalid_argument);                 // bad location
-    CHECK_THROWS_AS(w.m.addDepot(w.town), std::invalid_argument);                // not a depot
+    CHECK_THROWS_AS(w.m.addRequest(bad), std::invalid_argument);
+    CHECK_THROWS_AS(w.m.addDepot(w.town), std::invalid_argument);
 }
 
 void eventsAreLogged() {
@@ -257,12 +262,22 @@ void eventsAreLogged() {
     CHECK(contains(w.m.events().back().text, "N-55"));
 }
 
-// TODO (you): one test of your own. Idea: setRoadCondition(Flooded) on N-55
-// makes Depot A 10*2.5 + 20 = 45 min away, which is still nearer than B (90).
-// Check leg.minutes == 45.
+// flooded N-55 = 10*2.5 + 20 = 45 min, still closer than B (90)
+void floodedRoadIsSlowerButStillNearest() {
+    World w;
+    w.stock(w.depotA, Supply::Food, 100);
+    w.stock(w.depotB, Supply::Food, 100);
+    CHECK(w.m.setRoadCondition(w.village, w.town, RoadCondition::Flooded));
+    w.request("F1", Supply::Food, 50, 4);
+    Decision d = w.m.processNext();
+    CHECK_EQ(d.legs.size(), 1u);
+    CHECK_EQ(d.legs.at(0).depotNodeId, w.depotA);
+    CHECK_EQ(d.legs.at(0).minutes, 45.0);
+}
 
-}  // namespace
+}
 
+// called from test_main.cpp
 void runReliefTests() {
     test::section("ReliefManager");
     test::runCase("baseScoreFormula", baseScoreFormula);
@@ -279,4 +294,5 @@ void runReliefTests() {
     test::runCase("processAllEmptiesQueue", processAllEmptiesQueue);
     test::runCase("badRequestsThrow", badRequestsThrow);
     test::runCase("eventsAreLogged", eventsAreLogged);
+    test::runCase("floodedRoadIsSlowerButStillNearest", floodedRoadIsSlowerButStillNearest);
 }

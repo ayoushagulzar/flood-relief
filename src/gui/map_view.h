@@ -1,14 +1,6 @@
-// map_view.h - the map: projection, camera, basemap and the graph on top.
-//
-// World vs screen:
-//   world  = Web Mercator pixels at the reference zoom 6 (Pakistan is ~780 x 730)
-//   screen = window pixels. Camera2D (offset, target, zoom) maps world -> screen.
-// Tiles are drawn inside BeginMode2D(cam) (they live in world space).
-// Roads, symbols and labels are drawn in SCREEN space after projecting each
-// point with GetWorldToScreen2D: that keeps lines 1-3 px thick and text
-// crisp at every zoom instead of growing with the camera.
-// To find what the mouse is over: GetScreenToWorld2D(GetMousePosition(), cam).
-#pragma once
+// this file declares MapView -> the map: camera, zoom, pan and drawing the graph.
+// world = map pixels at zoom 6, screen = window pixels. Camera2D converts between them
+#pragma once // this prevents multiple inclusions of the header file.
 
 #include "raylib.h"
 
@@ -16,70 +8,62 @@
 #include "gui/basemap.h"
 #include "relief/relief_manager.h"
 
-// Extra things to highlight on top of the graph. Phase 7 passes an empty one;
-// Phase 8 fills it from the mouse (hover/selection) and the last Decision.
+// things to highlight on the map this frame (App fills it)
 struct MapOverlay {
     int hoverNode = -1;
     int hoverRoadU = -1, hoverRoadV = -1;
     int selectedNode = -1;
     int selectedRoadU = -1, selectedRoadV = -1;
-    DynamicArray<DynamicArray<int>> routes;  // node paths to draw as the route
-    int pulseNode = -1;                      // node that just got served
-    float pulseAge = 99.0f;                  // seconds since the pulse started
-    bool roadMode = false;                   // Block tool: roads get easier to see
+    DynamicArray<DynamicArray<int>> routes; // paths of the last delivery
+    int pulseNode = -1; // place that was just served
+    float pulseAge = 99.0f;
+    bool roadMode = false; // true when Close road tool is on
 };
 
 class MapView {
 public:
-    // Pakistan's bounding box (with a little margin).
-    static constexpr double kMinLat = 23.4, kMaxLat = 37.3, kMinLon = 60.6, kMaxLon = 77.9;
+    static constexpr double kMinLat = 23.4, kMaxLat = 37.3, kMinLon = 60.6, kMaxLon = 77.9; // Pakistan box
 
-    void init();    // after InitWindow
-    void unload();  // before CloseWindow
+    void init();
+    void unload();
 
-    // Projection. Pure maths, O(1).
-    static Vector2 latLonToWorld(double lat, double lon);
+    static Vector2 latLonToWorld(double lat, double lon); // lat/lon -> map pixels (Web Mercator)
     Vector2 worldToScreen(Vector2 w) const { return GetWorldToScreen2D(w, cam_); }
     Vector2 screenToWorld(Vector2 s) const { return GetScreenToWorld2D(s, cam_); }
     Vector2 nodeScreen(const Graph& g, int id) const;
 
-    // Input: wheel zoom towards the cursor, drag to pan, Home resets.
-    // mouseOverUI = the mouse is on a panel, so the map must ignore it.
-    // keyboard = false while the user types somewhere else (search box).
-    void update(Rectangle mapRect, bool mouseOverUI, bool keyboard = true);
-    void resetView();
-    void focusOn(Vector2 world);  // centre on a world point and zoom in
+    void update(Rectangle mapRect, bool mouseOverUI, bool keyboard = true); // zoom with wheel, drag to move, Home resets
+    void resetView(); // show all of Pakistan
+    void focusOn(Vector2 world); // zoom to a place (search)
 
-    // True for one frame when the left button was released WITHOUT dragging:
-    // a real click on the map (Phase 8 uses this for picking).
-    bool clicked() const { return clicked_; }
+    bool clicked() const { return clicked_; } // true if clicked without dragging
     bool isDragging() const { return dragging_; }
     float zoom() const { return cam_.zoom; }
     const Camera2D& camera() const { return cam_; }
     Rectangle rect() const { return rect_; }
 
-    void draw(const ReliefManager& m, const MapOverlay& overlay);
+    void draw(const ReliefManager& m, const MapOverlay& overlay); // draws everything
 
 private:
-    void drawOutline();  // Pakistan + sea from outline.h (works offline)
-    void drawBasemap();  // OSM tiles on top, where they have loaded
+    void drawOutline(); // offline Pakistan shape
+    void drawBasemap(); // OSM tiles
     void drawRoads(const Graph& g, const MapOverlay& o);
     void drawRoutes(const Graph& g, const MapOverlay& o);
     void drawNodes(const ReliefManager& m, const MapOverlay& o);
     void drawLabels(const ReliefManager& m, const MapOverlay& o);
     void drawLegend();
     Rectangle legendRect() const;
-    void drawCorner();  // zoom, home hint, attribution
-    void clampCamera();
-    float fitZoom() const;
+    void drawCorner(); // zoom text + OSM credit
+    void clampCamera(); // don't let the map go too far away
+    float fitZoom() const; // zoom where Pakistan fits
 
-    Camera2D cam_{};
+    Camera2D cam_{}; // raylib camera (offset, target, zoom)
     Rectangle rect_{0, 0, 0, 0};
     Basemap basemap_;
     bool initialised_ = false;
     bool pressedInMap_ = false;
     bool dragging_ = false;
     bool clicked_ = false;
-    bool userMoved_ = false;  // zoomed or panned since the last reset?
-    Vector2 pressPos_{0, 0};
+    bool userMoved_ = false; // zoomed or moved since reset?
+    Vector2 pressPos_{0, 0}; // to tell click and drag apart
 };
