@@ -1,16 +1,8 @@
-// Command-line interface for Flood Relief.
-// Rule: this file only reads input, calls ReliefManager, and prints results.
-// No relief logic lives here (Graph/Dijkstra are used read-only for `route`
-// and `bench`).
-//
-// Usage:  relief_cli [scenario.txt] [--no-color]
-// Type `help` for commands. Arguments with spaces are separated by commas:
-//   block Jamshoro, Sehwan
-//
-// Look: a one-line header, a framed summary, and one coloured line or box per
-// result. Everything fits in 80 columns (the default Git Bash window).
-// Colours are ANSI escape codes; they are switched off with --no-color, with
-// the NO_COLOR environment variable, or when the output is not a terminal.
+// this file is the command line program (relief_cli).
+// it only reads commands, calls ReliefManager and prints the result.
+// usage: relief_cli [scenario.txt] [--no-color]
+// e.g. "block Jamshoro, Sehwan" (commas between place names)
+
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -22,6 +14,7 @@
 #include <sstream>
 #include <string>
 
+// windows only headers (for colours and UTF-8 in the console)
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -39,18 +32,18 @@
 #include "relief/relief_manager.h"
 #include "relief/scenario_loader.h"
 
+// anonymous namespace -> only used in this file
 namespace {
 
-// ============================================================ terminal look
-
+// helpers for colours, padding and boxes
 namespace term {
 
-bool gColor = true;
+bool gColor = true; // false = print without colours
 
-// Colours (24-bit). Yellow = brand/prompt, pink = labels, green = good news,
-// red = closed/waiting, orange = partial, grey = details.
+// colours used in the terminal
 enum class C { Yellow, Pink, Green, Frame, White, Grey, Red, Orange, Blue };
 
+// ANSI escape code for each colour (24-bit colour)
 std::string code(C c) {
     if (!gColor) return "";
     switch (c) {
@@ -69,32 +62,35 @@ std::string code(C c) {
 std::string bold() { return gColor ? "\x1b[1m" : ""; }
 std::string reset() { return gColor ? "\x1b[0m" : ""; }
 
-// paint(C::Green, "served") -> the text in green (or plain without colour).
+// paint(C::Green, "served") -> "served" in green
 std::string paint(C c, const std::string& s, bool strong = false) { return (strong ? bold() : "") + code(c) + s + reset(); }
 
-// Characters on screen, not bytes: "→" is 3 bytes in UTF-8 but 1 column.
+// counts characters, not bytes ("→" is 3 bytes but 1 character)
 std::size_t width(const std::string& s) {
     std::size_t n = 0;
     for (unsigned char ch : s)
         if ((ch & 0xC0) != 0x80) ++n;
     return n;
 }
+// pad = spaces on the right, padLeft = spaces on the left, fit = cuts with "..."
 std::string pad(const std::string& s, std::size_t w) { return width(s) >= w ? s : s + std::string(w - width(s), ' '); }
 std::string padLeft(const std::string& s, std::size_t w) { return width(s) >= w ? s : std::string(w - width(s), ' ') + s; }
 std::string fit(const std::string& s, std::size_t w) { return s.size() <= w ? s : s.substr(0, w - 3) + "..."; }
 
+// returns text in CAPITALS
 std::string upper_copy(std::string s) {
     for (char& ch : s) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
     return s;
 }
 
+// repeat("=", 3) -> "==="
 std::string repeat(const std::string& piece, std::size_t n) {
     std::string out;
     for (std::size_t i = 0; i < n; ++i) out += piece;
     return out;
 }
 
-// Splits text into lines of at most `w` columns (breaks at spaces).
+// breaks long text into lines of max w characters
 DynamicArray<std::string> wrap(const std::string& text, std::size_t w) {
     DynamicArray<std::string> lines;
     std::istringstream words(text);
@@ -110,8 +106,7 @@ DynamicArray<std::string> wrap(const std::string& text, std::size_t w) {
     return lines;
 }
 
-// One line inside a box: the coloured text, and its plain version (used to
-// measure it, because colour codes take no space on screen).
+// one line in a box. plain = same text without colour codes (used to measure it)
 struct Line {
     std::string shown;
     std::string plain;
@@ -119,10 +114,7 @@ struct Line {
 Line line(const std::string& shown, const std::string& plain) { return Line{shown, plain}; }
 Line blank() { return Line{"", ""}; }
 
-// A framed box, `w` columns wide, lines centred, starting at column 2:
-//   ┌──────────┐
-//   │  text    │
-//   └──────────┘
+// draws a box around the lines (used for the green decision box)
 void box(const DynamicArray<Line>& lines, std::size_t w = 76) {
     std::string h = gColor ? "\xE2\x94\x80" : "-", v = gColor ? "\xE2\x94\x82" : "|";
     std::string tl = gColor ? "\xE2\x94\x8C" : "+", tr = gColor ? "\xE2\x94\x90" : "+";
@@ -138,8 +130,7 @@ void box(const DynamicArray<Line>& lines, std::size_t w = 76) {
     std::cout << "  " << paint(C::Frame, bl + repeat(h, w - 2) + br) << "\n";
 }
 
-// Decide whether to use colour, and make the Windows console understand
-// ANSI codes and UTF-8 (Git Bash and Windows Terminal already do).
+// decides if we use colours. on windows it also turns on colours + UTF-8
 void setup(bool noColorFlag) {
     bool tty;
 #ifdef _WIN32
@@ -148,31 +139,29 @@ void setup(bool noColorFlag) {
     HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD mode = 0;
     if (out != INVALID_HANDLE_VALUE && GetConsoleMode(out, &mode))
-        SetConsoleMode(out, mode | 0x0004 /* ENABLE_VIRTUAL_TERMINAL_PROCESSING */);
+        SetConsoleMode(out, mode | 0x0004);
 #else
     tty = isatty(1) != 0;
 #endif
-    // Git Bash (mintty) shows programs through a pipe, so isatty() is false
-    // there even though it is a real terminal; TERM tells us it can do colour.
     const char* t = std::getenv("TERM");
     bool termOk = t && std::string(t) != "dumb";
     gColor = !noColorFlag && std::getenv("NO_COLOR") == nullptr && (tty || termOk);
 }
 
-}  // namespace term
+}
 
+// so we can write C::Green instead of term::C::Green
 using term::C;
 using term::paint;
 
-// Symbols that exist in every Windows console font (Lucida Console, Consolas).
-const char* kDot = "\xC2\xB7";     // ·
-const char* kArrow = "\xE2\x86\x92";  // →
-const char* kServed = "\xE2\x97\x8F";  // ●
-const char* kPartial = "\xE2\x97\x8B";  // ○
-const char* kCross = "\xC3\x97";   // ×
+// symbols written as UTF-8 bytes
+const char* kDot = "\xC2\xB7";
+const char* kArrow = "\xE2\x86\x92";
+const char* kServed = "\xE2\x97\x8F";
+const char* kPartial = "\xE2\x97\x8B";
+const char* kCross = "\xC3\x97";
 
-// ============================================================ helpers
-
+// removes spaces at start and end
 std::string trim(const std::string& s) {
     std::size_t a = 0, b = s.size();
     while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
@@ -180,6 +169,7 @@ std::string trim(const std::string& s) {
     return s.substr(a, b - a);
 }
 
+// "Jamshoro, Sehwan" -> ["Jamshoro", "Sehwan"]
 DynamicArray<std::string> splitArgs(const std::string& s) {
     DynamicArray<std::string> out;
     if (trim(s).empty()) return out;
@@ -191,7 +181,7 @@ DynamicArray<std::string> splitArgs(const std::string& s) {
 
 bool fileExists(const std::string& p) { return static_cast<bool>(std::ifstream(p)); }
 
-// The exe usually runs from build/bin, so also look a few folders up.
+// finds data/pakistan.txt, the exe is in build/bin so it also checks folders above
 std::string findScenario(const std::string& name) {
     const char* prefixes[] = {"", "../", "../../", "../../../"};
     for (const char* p : prefixes) {
@@ -201,6 +191,7 @@ std::string findScenario(const std::string& name) {
     return name;
 }
 
+// "Sukkur Depot" -> "Sukkur"
 std::string withoutDepotWord(const std::string& name) {
     const std::string suffix = " Depot";
     if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
@@ -208,7 +199,7 @@ std::string withoutDepotWord(const std::string& name) {
     return name;
 }
 
-// Mark + word + colour for each status, e.g. "● SERVED" in green.
+// symbol + word + colour for each status
 struct Look {
     const char* mark;
     const char* word;
@@ -224,8 +215,10 @@ Look lookOf(Status s) {
     return {" ", "?", C::Grey};
 }
 
+// 5 red, 4 orange, 3 yellow, rest grey
 C urgencyColor(int u) { return u >= 5 ? C::Red : (u == 4 ? C::Orange : (u == 3 ? C::Yellow : C::Grey)); }
 
+// colour for each event type in the log
 C eventColor(EventType t) {
     switch (t) {
         case EventType::Served:
@@ -239,10 +232,10 @@ C eventColor(EventType t) {
     }
 }
 
-// ============================================================ the CLI
-
+// the CLI program itself
 class Cli {
 public:
+    // reads arguments, loads the file, then keeps reading commands until quit
     void run(int argc, char** argv) {
         bool noColor = false;
         std::string file;
@@ -262,7 +255,7 @@ public:
             if (!std::getline(std::cin, input)) break;
             input = trim(input);
             if (input.empty()) continue;
-            std::string cmd = input, rest;
+            std::string cmd = input, rest; // first word = command, rest = arguments
             std::size_t sp = input.find(' ');
             if (sp != std::string::npos) {
                 cmd = input.substr(0, sp);
@@ -272,7 +265,7 @@ public:
             std::cout << "\n";
             try {
                 dispatch(cmd, rest);
-            } catch (const std::exception& e) {
+            } catch (const std::exception& e) { // e.g. unknown place -> show error and continue
                 error(e.what());
             }
         }
@@ -280,14 +273,12 @@ public:
     }
 
 private:
-    std::unique_ptr<ReliefManager> m_ = std::make_unique<ReliefManager>();
+    std::unique_ptr<ReliefManager> m_ = std::make_unique<ReliefManager>(); // unique_ptr -> deletes itself, and we can swap it on "load"
     std::string loadedName_;
 
-    // ---------------------------------------------------------- frame
-
-    // One plain header line over a double rule (no ASCII-art banner).
+    // title line at the start
     static void banner() {
-        std::string rule = term::gColor ? term::repeat("\xE2\x95\x90", 76) : std::string(76, '=');  // ═
+        std::string rule = term::gColor ? term::repeat("\xE2\x95\x90", 76) : std::string(76, '=');
         std::string dot = std::string("  ") + kDot + "  ";
         std::cout << "\n  " << paint(C::Yellow, "FLOOD RELIEF", true)
                   << paint(C::Grey, dot + "relief_cli 1.0" + dot + "C++17" + dot + "type 'help' for commands") << "\n"
@@ -295,6 +286,7 @@ private:
                   << "  " << paint(C::Pink, "Usage: relief_cli") << "\n";
     }
 
+    // small print helpers
     static void error(const std::string& msg) {
         std::cout << "  " << paint(C::Red, std::string(kCross) + " Error:", true) << " " << msg << "\n";
     }
@@ -303,6 +295,7 @@ private:
 
     static void heading(const std::string& title) { std::cout << "  " << paint(C::White, title, true) << "\n"; }
 
+    // command -> function
     void dispatch(const std::string& cmd, const std::string& rest) {
         DynamicArray<std::string> a = splitArgs(rest);
         if (cmd == "help") help();
@@ -326,6 +319,7 @@ private:
         else error("unknown command '" + cmd + "'. Type 'help'.");
     }
 
+    // prints all the commands
     static void help() {
         struct Row {
             const char* cmd;
@@ -361,6 +355,7 @@ private:
                   << paint(C::Pink, "block jamshoro sehwan") << "\n";
     }
 
+    // loads into a new manager first, only replaces the old one if loading worked
     void load(const std::string& path, bool startup) {
         if (path.empty()) {
             note("Usage: load <file>");
@@ -389,8 +384,7 @@ private:
         term::box(lines);
     }
 
-    // Place id for a name, or -1. Exact match first (HashTable, O(1) average);
-    // if that fails, a case-insensitive scan (O(V)), so "jamshoro" works too.
+    // name -> id. first exact match (hash table), then not case sensitive ("jamshoro" works)
     int findPlace(const std::string& name) const {
         int id = m_->graph().findNode(name);
         if (id >= 0) return id;
@@ -400,14 +394,14 @@ private:
         return -1;
     }
 
+    // same but throws if not found
     int place(const std::string& name) {
         int id = findPlace(name);
         if (id < 0) throw std::invalid_argument("unknown place '" + name + "' (check spelling; 'list' and 'depots' show names)");
         return id;
     }
 
-    // Splits "Dadu Camp Dadu" (no comma) into two place names by trying every
-    // space as the split point. Returns false if no split gives two places.
+    // without comma: "Dadu Camp Dadu" -> tries every space until both sides are real places
     bool splitTwoPlaces(const std::string& text, std::string& a, std::string& b) const {
         for (std::size_t i = 0; i < text.size(); ++i) {
             if (text[i] != ' ') continue;
@@ -421,8 +415,7 @@ private:
         return false;
     }
 
-    // Accepts "A, B" or "A B" for commands that need two places. On success
-    // `out` holds the two names (plus any extra comma fields after them).
+    // works with "A, B" and "A B"
     bool twoPlaces(const DynamicArray<std::string>& args, const std::string& rest, DynamicArray<std::string>& out) const {
         if (args.size() >= 2) {
             out = args;
@@ -436,7 +429,7 @@ private:
         return true;
     }
 
-    static std::string lastWord(std::string& text) {  // removes and returns the last word
+    static std::string lastWord(std::string& text) { // removes and returns the last word
         text = trim(text);
         std::size_t sp = text.find_last_of(' ');
         std::string w = sp == std::string::npos ? text : text.substr(sp + 1);
@@ -446,9 +439,7 @@ private:
 
     const std::string& name(int id) { return m_->graph().node(id).name; }
 
-    // ---------------------------------------------------------- decisions
-
-    // "● SERVED  R-01  Dadu Camp · water · urgency 5 · 8,000 people · vulnerable"
+    // first line of a decision e.g. "● SERVED  R-01  Dadu Camp ..."
     void decisionHeader(const Decision& d) {
         Look lk = lookOf(d.status);
         std::cout << "  " << paint(lk.color, std::string(lk.mark) + " " + lk.word, true) << "  "
@@ -463,7 +454,7 @@ private:
         std::cout << "\n";
     }
 
-    // The green box: one block per depot that sent supplies.
+    // green box with amount, depot, time and path for each depot
     void decisionBox(const Decision& d) {
         DynamicArray<term::Line> lines;
         lines.pushBack(term::blank());
@@ -496,6 +487,7 @@ private:
         term::box(lines);
     }
 
+    // "next" -> serves one request
     void next() {
         Decision d = m_->processNext();
         if (!d.valid) {
@@ -516,6 +508,7 @@ private:
                   << paint(C::Pink, "why") << paint(C::Grey, " for the full explanation.") << "\n";
     }
 
+    // "all" -> serves every request in the heap, one line each
     void all() {
         int n = 0, served = 0, partial = 0, waiting = 0;
         while (m_->hasPending()) {
@@ -545,6 +538,7 @@ private:
                   << paint(C::Red, std::to_string(waiting) + " waiting for a road or stock") << "\n";
     }
 
+    // "why" -> full explanation of last decision + the priority calculation
     void why() {
         const Decision& d = m_->lastDecision();
         if (!d.valid) {
@@ -580,7 +574,7 @@ private:
             }
         }
         const Request* r = m_->findRequest(d.requestId);
-        if (r) {  // the aging formula from relief_manager.h, step by step
+        if (r) {
             std::cout << "\n";
             heading("Why it went first:");
             auto row = [](const std::string& what, double value, bool total) {
@@ -602,15 +596,14 @@ private:
         }
     }
 
-    // ---------------------------------------------------------- the world
-
+    // block / reopen / condition. kind: 'b' = block, 'r' = reopen, 'c' = condition
     void roadAction(const DynamicArray<std::string>& args, const std::string& rest, char kind) {
         const char* usage = kind == 'b' ? "block <place>, <place>      e.g. block Jamshoro, Sehwan"
                           : kind == 'r' ? "reopen <place>, <place>     e.g. reopen Abbottabad, Gilgit"
                                         : "condition <place>, <place>, <clear|damaged|flooded>   e.g. condition Sehwan, Dadu, clear";
         DynamicArray<std::string> a;
         bool ok2;
-        if (kind == 'c' && args.size() < 3) {  // "condition Sehwan Dadu clear": last word = condition
+        if (kind == 'c' && args.size() < 3) { // no commas: last word is the condition
             std::string text = rest;
             std::string cond = lastWord(text);
             DynamicArray<std::string> none;
@@ -660,9 +653,10 @@ private:
                       << paint(C::Grey, " to see the heap.") << "\n";
     }
 
+    // "stock <depot>, <supply>, <n>"
     void addStock(const DynamicArray<std::string>& args, const std::string& rest) {
         DynamicArray<std::string> a = args;
-        if (a.size() == 1) {  // "stock Sukkur Depot water 500"
+        if (a.size() == 1) {
             std::string text = rest;
             std::string qty = lastWord(text), sup = lastWord(text);
             a.clear();
@@ -681,6 +675,7 @@ private:
         std::cout << "  " << paint(C::Green, std::string(kServed) + " STOCK", true) << "  " << m_->events().back().text << "\n";
     }
 
+    // "add" -> new request (needs 7 values)
     void addRequest(const DynamicArray<std::string>& a) {
         if (a.size() != 7) {
             note("Usage: add <id>, <place>, <supply>, <qty>, <urgency 1-5>, <people>, <yes|no>");
@@ -701,6 +696,7 @@ private:
                   << paint(urgencyColor(r.urgency), "urgency " + std::to_string(r.urgency)) << "\n";
     }
 
+    // "time <minutes>" -> moves the clock
     void advance(const DynamicArray<std::string>& a) {
         if (a.size() != 1) {
             note("Usage: time <minutes>");
@@ -710,16 +706,14 @@ private:
         std::cout << "  " << paint(C::Pink, "Clock:") << " " << formatClock(m_->now()) << "\n";
     }
 
-    // ---------------------------------------------------------- views
-
-    // Requests like the GUI list: open ones by priority, served ones last.
+    // "list" -> all requests, open ones by priority, served ones at the end
     void listRequests() {
         const DynamicArray<Request>& rs = m_->requests();
         if (rs.isEmpty()) {
             note("No requests.");
             return;
         }
-        DynamicArray<int> order;  // insertion sort on indices (stable, n is small)
+        DynamicArray<int> order; // insertion sort on indexes
         auto before = [&](int x, int y) {
             bool dx = rs[x].status == Status::Fulfilled, dy = rs[y].status == Status::Fulfilled;
             if (dx != dy) return !dx;
@@ -757,9 +751,7 @@ private:
         std::cout << "\n  " << paint(C::Grey, "Left = units still needed   Key = heap key (higher goes first)   * vulnerable") << "\n";
     }
 
-    // The request heap exactly as stored: an array where the children of slot i
-    // are 2i+1 and 2i+2. Printed level by level, then checked: every parent's
-    // key must be >= its children's keys (the heap property).
+    // "queue" -> prints the heap array level by level and checks parent >= children
     void showQueue() {
         const DynamicArray<Request>& rs = m_->requests();
         DynamicArray<int> heap = m_->queueSnapshot();
@@ -812,6 +804,7 @@ private:
         note("Retried automatically after block, reopen, condition or stock changes.");
     }
 
+    // "depots" -> stock of every depot
     void listDepots() {
         const DynamicArray<Depot>& ds = m_->depots();
         std::cout << "    " << paint(C::White, term::pad("Depot", 14), true);
@@ -828,6 +821,7 @@ private:
         }
     }
 
+    // "route A, B" -> runs dijkstra and prints the path road by road
     void route(const DynamicArray<std::string>& args, const std::string& rest) {
         DynamicArray<std::string> a;
         if (!twoPlaces(args, rest, a) || a.size() != 2) {
@@ -858,6 +852,7 @@ private:
         }
     }
 
+    // "stats" -> totals and unmet demand
     void stats() {
         Stats s = m_->stats();
         std::cout << "  " << paint(C::Pink, "Requests:") << "  " << s.total << "   " << paint(C::Green, std::to_string(s.fulfilled) + " served")
@@ -873,11 +868,12 @@ private:
                   << "    " << term::pad("Clock", 34) << paint(C::White, formatClock(m_->now()), true) << "\n";
     }
 
+    // "log [n]" -> last n events, newest first
     void showLog(const DynamicArray<std::string>& a) {
         const DynamicArray<Event>& ev = m_->events();
         std::size_t n = a.isEmpty() ? 10 : static_cast<std::size_t>(std::stoi(a[0]));
         std::size_t start = ev.size() > n ? ev.size() - n : 0;
-        for (std::size_t i = ev.size(); i > start; --i) {  // newest first
+        for (std::size_t i = ev.size(); i > start; --i) {
             const Event& e = ev[i - 1];
             std::string clock = formatClock(e.time);
             DynamicArray<std::string> lines = term::wrap(e.text, 50);
@@ -887,12 +883,12 @@ private:
         }
     }
 
-    // Random connected graph: a spanning tree (node i links to a random earlier
-    // node) plus extra random roads, ~6,000 roads in total.
+    // "bench" -> times dijkstra on a random graph (2000 nodes, 6000 roads).
+    // first a tree so the graph is connected, then random extra roads
     void bench() {
         const int kNodes = 2000, kRoads = 6000, kRuns = 100;
         Graph g;
-        unsigned int seed = 12345;
+        unsigned int seed = 12345; // fixed seed -> same graph every time
         auto rnd = [&seed](int n) {
             seed = seed * 1103515245u + 12345u;
             return static_cast<int>((seed >> 8) % static_cast<unsigned int>(n));
@@ -922,8 +918,9 @@ private:
     }
 };
 
-}  // namespace
+}
 
+// program starts here
 int main(int argc, char** argv) {
     Cli cli;
     cli.run(argc, argv);

@@ -1,18 +1,14 @@
-// outline.h - a simple outline of Pakistan and the Arabian Sea, used to draw
-// the map when the OSM tiles are not available (offline: no internet, or the
-// tiles have not downloaded yet). Hand-traced, about 50 points: good enough
-// for a background, NOT an official border.
-//
-// raylib can only fill convex shapes in one call, and the outline is concave.
-// So each polygon was cut into triangles once, ahead of time (ear clipping),
-// and the triangle list is stored here as indices into the point list.
-#pragma once
+// this file has a simple outline of Pakistan and the sea (drawn by hand, about 50 points).
+// used when map tiles are not downloaded (no internet). not an official border.
+// raylib can't fill a concave shape so it is already split into triangles
+#pragma once // this prevents multiple inclusions of the header file.
 
-struct LatLon {
+struct LatLon { // one point
     double lat, lon;
 };
 
 // clang-format off
+// Pakistan points + triangles (3 indexes each)
 inline const LatLon kBorder[] = {
     {25.10, 61.60}, {25.30, 63.50}, {25.20, 64.60}, {25.40, 65.50}, {24.90, 66.70}, {24.20, 67.40},
     {23.80, 68.20}, {23.70, 68.70}, {24.30, 70.00}, {24.40, 71.00}, {25.20, 70.60}, {25.70, 70.30},
@@ -33,6 +29,7 @@ inline const int kBorderTriangles[] = {
     15, 43, 44
 };
 
+// sea points + triangles
 inline const LatLon kSea[] = {
     {25.50, 55.00}, {25.30, 57.30}, {25.60, 59.50}, {25.30, 61.00}, {25.10, 61.60}, {25.30, 63.50},
     {25.20, 64.60}, {25.40, 65.50}, {24.90, 66.70}, {24.20, 67.40}, {23.80, 68.20}, {23.70, 68.70},

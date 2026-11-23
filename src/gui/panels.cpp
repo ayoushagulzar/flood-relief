@@ -1,6 +1,5 @@
-// panels.cpp - the right panel pages (Overview, Queue, Depots, Why, Events)
-// and the Add-request form. All read straight from ReliefManager every
-// frame (immediate mode).
+// this file has the right panel pages (Overview, Queue, Depots, Why, Events) and the add request form.
+// every page reads from ReliefManager every frame so it is always up to date
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -14,9 +13,10 @@ using namespace theme;
 
 namespace {
 
-constexpr float kPagePad = 18;
-constexpr float kRowH = 68;
+constexpr float kPagePad = 18; // space inside the panel
+constexpr float kRowH = 68; // height of one row on the Queue page
 
+// colour for each status
 Color statusColor(Status s) {
     switch (s) {
         case Status::Fulfilled: return kFulfilled;
@@ -27,6 +27,7 @@ Color statusColor(Status s) {
     return kPending;
 }
 
+// colour for each event type
 Color eventColor(EventType t) {
     switch (t) {
         case EventType::Served: return kFulfilled;
@@ -41,6 +42,7 @@ Color eventColor(EventType t) {
     }
 }
 
+// "Sukkur Depot" -> "Sukkur"
 std::string depotLabel(const std::string& name) {
     const std::string suffix = " Depot";
     if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
@@ -48,13 +50,14 @@ std::string depotLabel(const std::string& name) {
     return name;
 }
 
+// "Water" -> "water"
 std::string lowerWord(const char* s) {
     std::string out = s;
     for (char& ch : out) ch = static_cast<char>(ch >= 'A' && ch <= 'Z' ? ch - 'A' + 'a' : ch);
     return out;
 }
 
-// Wheel scrolling for a panel area: only when the mouse is over it.
+// scroll with the mouse wheel (only when mouse is over the area)
 void scrollWith(Rectangle area, float& scroll, float contentH) {
     if (ui::hovered(area)) scroll -= GetMouseWheelMove() * 48;
     float maxScroll = contentH - area.height;
@@ -63,6 +66,7 @@ void scrollWith(Rectangle area, float& scroll, float contentH) {
     if (scroll < 0) scroll = 0;
 }
 
+// thin scrollbar if content is longer than the area
 void scrollbar(Rectangle area, float scroll, float contentH) {
     if (contentH <= area.height) return;
     float h = area.height * area.height / contentH;
@@ -70,18 +74,19 @@ void scrollbar(Rectangle area, float scroll, float contentH) {
     ui::roundRect({area.x + area.width - 5, y, 3, h}, 1.5f, kAccentSoft);
 }
 
+// only draw inside r (so scrolled rows don't go outside)
 void beginClip(Rectangle r) {
     BeginScissorMode(static_cast<int>(r.x), static_cast<int>(r.y), static_cast<int>(r.width), static_cast<int>(r.height));
 }
 
-// Page title + a short muted line under it. Returns the y below.
+// title + small text under it, returns the y below it
 float pageTitle(Rectangle r, const std::string& title, const std::string& sub) {
     ui::text(title, {r.x + kPagePad, r.y + 16}, kBody, kText, Weight::SemiBold);
     if (!sub.empty()) ui::text(sub, {r.x + kPagePad, r.y + 39}, kSmall, kMuted);
     return r.y + (sub.empty() ? 48 : 70);
 }
 
-// One "Last decision" tile: a bold top line and a small second line.
+// one of the 4 "last decision" tiles
 bool tile(Rectangle r, const std::string& top, const std::string& bottom, Color fill, bool filled) {
     bool hot = ui::hovered(r);
     if (filled) {
@@ -102,10 +107,9 @@ bool tile(Rectangle r, const std::string& top, const std::string& bottom, Color 
     return ui::clickedIn(r);
 }
 
-}  // namespace
+}
 
-// ---------------------------------------------------------------- right panel
-
+// shows the add form if that tool is on, otherwise the selected page
 void App::drawRightPanel(Rectangle r) {
     DrawRectangleRec(r, kPanel);
     ui::vline(r.x, r.y, r.y + r.height, kRule);
@@ -122,9 +126,8 @@ void App::drawRightPanel(Rectangle r) {
     }
 }
 
-// The heap AS STORED (array order: slot 0 is the root = served next), as
-// bars. It is not sorted: a heap only promises parent >= children, so
-// e.g. slot 3 can be bigger than slot 2. Then the last decision as 4 tiles.
+// Overview: the heap array as bars (slot 0 = next to serve) + the last decision.
+// the bars are NOT sorted, a heap only keeps parent >= children
 void App::drawOverviewPage(Rectangle r) {
     const DynamicArray<Request>& rq = manager_->requests();
     float x = r.x + kPagePad, w = r.width - kPagePad * 2;
@@ -196,7 +199,6 @@ void App::drawOverviewPage(Rectangle r) {
     const Request& q = rq[static_cast<std::size_t>(d.requestIndex)];
     const Graph& g = manager_->graph();
 
-    // 1: what was delivered
     double longest = 0;
     for (std::size_t i = 0; i < d.legs.size(); ++i)
         if (d.legs[i].minutes > longest) longest = d.legs[i].minutes;
@@ -205,7 +207,6 @@ void App::drawOverviewPage(Rectangle r) {
                                               formatMinutes(longest)
                                         : std::string(statusName(d.status)) + " · nothing sent";
     Color c1 = d.status == Status::Deferred ? kAlert : kAccent;
-    // 2: from where
     std::string t2, b2;
     if (d.legs.size() == 1) {
         t2 = "from " + g.node(d.legs[0].depotNodeId).name;
@@ -217,12 +218,10 @@ void App::drawOverviewPage(Rectangle r) {
         t2 = "no depot reached it";
         b2 = d.skipped.isEmpty() ? "no stock" : d.skipped[0].reason;
     }
-    // 3: the key and where it comes from
     char t3[32], b3[96];
     std::snprintf(t3, sizeof(t3), "Key %.0f", ReliefManager::heapKey(q));
     std::snprintf(b3, sizeof(b3), "%d + %.0f + %d − %.0f", q.urgency * 100, q.people / 100.0, q.vulnerable ? 50 : 0,
                   ReliefManager::kAgingPerMinute * q.arrivalTime);
-    // 4: what comes next
     std::string t4 = "Heap empty", b4 = "all requests handled";
     if (!heap.isEmpty()) {
         const Request& n = rq[static_cast<std::size_t>(heap[0])];
@@ -242,9 +241,7 @@ void App::drawOverviewPage(Rectangle r) {
     }
 }
 
-// Every request, sorted by priority: open requests first (highest heap key
-// first), fulfilled ones at the bottom. Insertion sort on indices: n = 28,
-// and it is stable, so equal keys keep their file order.
+// Queue: all requests sorted by priority (insertion sort), served ones at the bottom
 void App::drawQueuePage(Rectangle r) {
     const DynamicArray<Request>& rq = manager_->requests();
     DynamicArray<int> order;
@@ -279,7 +276,7 @@ void App::drawQueuePage(Rectangle r) {
         if (q.locationId == selNode_) ui::roundRect(row, 10, kPressed);
         else if (hot) ui::roundRect(row, 10, kHover);
         if (hot) panelHoverNode_ = q.locationId;
-        ui::roundRect({row.x + 8, row.y + 10, 3, row.height - 20}, 1.5f, c);  // status strip
+        ui::roundRect({row.x + 8, row.y + 10, 3, row.height - 20}, 1.5f, c);
 
         float x = row.x + 20, right = row.x + row.width - 10;
         Color main = done ? kMuted : kText;
@@ -300,7 +297,6 @@ void App::drawQueuePage(Rectangle r) {
         std::string status = statusName(q.status);
         ui::textRight(status, right, y2, kSmall, c);
 
-        // delivered / asked
         float bw = right - x;
         ui::roundRect({x, row.y + row.height - 8, bw, 3}, 1.5f, kRuleSoft);
         float frac = q.quantity > 0 ? static_cast<float>(q.delivered) / static_cast<float>(q.quantity) : 0;
@@ -315,6 +311,7 @@ void App::drawQueuePage(Rectangle r) {
     scrollbar(list, listScroll_, contentH);
 }
 
+// Depots: stock bars for each depot
 void App::drawDepotsPage(Rectangle r) {
     const DynamicArray<Depot>& ds = manager_->depots();
     float top = pageTitle(r, "Depots", std::to_string(ds.size()) + " depots · stock left");
@@ -357,8 +354,7 @@ void App::drawDepotsPage(Rectangle r) {
     scrollbar(list, depotScroll_, contentH);
 }
 
-// The last Decision in full: sentence, legs, skipped depots and the
-// priority maths that put this request at the top of the heap.
+// Why: full explanation of the last decision + priority calculation
 void App::drawWhyPage(Rectangle r) {
     const Decision& d = manager_->lastDecision();
     float x = r.x + kPagePad, w = r.width - kPagePad * 2;
@@ -421,7 +417,6 @@ void App::drawWhyPage(Rectangle r) {
         y += 8;
     }
 
-    // Priority maths (the aging formula from relief_manager.h), in a card.
     ui::text("Why it went first", {x, y}, kSmall, kText, Weight::SemiBold);
     y += 25;
     Rectangle mathCard{x - 4, y - 6, w + 8, 6 * 23 + 14};
@@ -430,7 +425,7 @@ void App::drawWhyPage(Rectangle r) {
     char buf[64];
     auto row = [&](const std::string& label, double value, Color c, bool strong) {
         ui::text(label, {x + 8, y}, kSmall, strong ? kText : kMuted, strong ? Weight::SemiBold : Weight::Regular);
-        std::snprintf(buf, sizeof(buf), "%.0f", value == 0 ? 0.0 : value);  // never "-0"
+        std::snprintf(buf, sizeof(buf), "%.0f", value == 0 ? 0.0 : value);
         ui::textRight(buf, x + w - 8, y, kSmall, c, strong ? Weight::SemiBold : Weight::Regular);
         y += 23;
     };
@@ -449,17 +444,17 @@ void App::drawWhyPage(Rectangle r) {
     scrollbar(area, whyScroll_, contentH);
 }
 
+// Events: the log, newest first
 void App::drawEventsPage(Rectangle r) {
     const DynamicArray<Event>& ev = manager_->events();
     float top = pageTitle(r, "Events", std::to_string(ev.size()) + " events · newest first");
     Rectangle list{r.x, top, r.width, r.y + r.height - top};
     float x = r.x + kPagePad, w = r.width - kPagePad * 2;
 
-    // Rows have different heights (wrapped text), so measure while drawing.
     beginClip(list);
     float y = list.y - logScroll_;
     for (std::size_t k = 0; k < ev.size(); ++k) {
-        const Event& e = ev[ev.size() - 1 - k];  // newest first
+        const Event& e = ev[ev.size() - 1 - k];
         DynamicArray<std::string> lines = ui::wrap(e.text, w - 14, kSmall);
         float h = 24 + static_cast<float>(lines.size()) * 20 + 12;
         if (y + h >= list.y && y <= list.y + list.height) {
@@ -479,8 +474,7 @@ void App::drawEventsPage(Rectangle r) {
     scrollbar(list, logScroll_, contentH);
 }
 
-// ---------------------------------------------------------------- add request
-
+// next free id e.g. R-29 (highest number + 1)
 std::string App::nextRequestId() const {
     int best = 0;
     const DynamicArray<Request>& rq = manager_->requests();
@@ -496,6 +490,7 @@ std::string App::nextRequestId() const {
     return buf;
 }
 
+// form to add a new request (click a place on the map first)
 void App::drawAddForm(Rectangle r) {
     float x = r.x + kPagePad, w = r.width - kPagePad * 2;
     float y = pageTitle(r, "Add request", "Esc to cancel");
@@ -534,7 +529,6 @@ void App::drawAddForm(Rectangle r) {
     ui::toggle({x + half + 12, y + labelGap, half, fieldH}, "Vulnerable", form_.vulnerable);
     y += labelGap + fieldH + rowGap + 4;
 
-    // live preview of the priority this request will get
     Request preview;
     preview.urgency = form_.urgency;
     preview.people = form_.people;
@@ -561,7 +555,7 @@ void App::drawAddForm(Rectangle r) {
         q.people = form_.people;
         q.vulnerable = form_.vulnerable;
         try {
-            manager_->addRequest(q);  // validates, logs the event, queues it
+            manager_->addRequest(q);
             selNode_ = form_.locationId;
             form_.locationId = -1;
             setTool(Tool::Select);

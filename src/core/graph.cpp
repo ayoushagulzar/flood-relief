@@ -1,8 +1,10 @@
-// graph.cpp - road network as an adjacency list (see graph.h for the design).
 #include "core/graph.h"
 
 #include <stdexcept>
 
+// ======================== helper functions ==========================
+
+// how much slower the road gets
 double conditionFactor(RoadCondition c) {
     switch (c) {
         case RoadCondition::Clear: return 1.0;
@@ -39,12 +41,13 @@ const char* conditionName(RoadCondition c) {
     return "?";
 }
 
+// ======================== Graph =====================================
+
 void Graph::checkId(int id) const {
     if (!isValid(id)) throw std::out_of_range("Graph: invalid node id " + std::to_string(id));
 }
 
-// O(1) amortized. ids are given in order 0, 1, 2 ... so a node id is also its
-// index in nodes_ and adj_. The name -> id pair goes into the HashTable.
+// id = position in nodes_, so ids are 0, 1, 2 ...
 int Graph::addNode(const std::string& name, NodeType type, double lat, double lon) {
     if (nameIndex_.contains(name)) throw std::invalid_argument("Graph: duplicate place name '" + name + "'");
     Node n;
@@ -54,13 +57,12 @@ int Graph::addNode(const std::string& name, NodeType type, double lat, double lo
     n.lat = lat;
     n.lon = lon;
     nodes_.pushBack(n);
-    adj_.pushBack(DynamicArray<Edge>());
-    nameIndex_.insert(name, n.id);
+    adj_.pushBack(DynamicArray<Edge>()); // empty road list for the new node
+    nameIndex_.insert(name, n.id);       // save name -> id for fast search
     return n.id;
 }
 
-// O(1) amortized. ONE road = TWO directed edges (u->v and v->u), so roads_ is
-// counted once but each adjacency list gets one edge.
+// one road = two edges, u->v and v->u
 void Graph::addRoad(int u, int v, double minutes, RoadType type, const std::string& name) {
     checkId(u);
     checkId(v);
@@ -71,14 +73,13 @@ void Graph::addRoad(int u, int v, double minutes, RoadType type, const std::stri
     e.type = type;
     e.roadName = name;
     e.to = v;
-    adj_[static_cast<std::size_t>(u)].pushBack(e);
+    adj_[static_cast<std::size_t>(u)].pushBack(e); // u -> v
     e.to = u;
-    adj_[static_cast<std::size_t>(v)].pushBack(e);
+    adj_[static_cast<std::size_t>(v)].pushBack(e); // v -> u
     ++roads_;
 }
 
-// O(degree(u)). Pointer INTO adj_[u] (the list is taken by reference, so we
-// return the real edge, not a copy). nullptr if u has no road to v.
+// returns pointer to the real edge (not a copy) so we can change it
 Edge* Graph::findEdge(int u, int v) {
     DynamicArray<Edge>& list = adj_[static_cast<std::size_t>(u)];
     for (std::size_t i = 0; i < list.size(); ++i)
@@ -95,8 +96,7 @@ const Edge* Graph::edgeBetween(int u, int v) const {
     return nullptr;
 }
 
-// O(degree). Both directions must change, otherwise Dijkstra could still use
-// the road from the other side.
+// both directions must be blocked, otherwise dijkstra can still use it from the other side
 bool Graph::blockRoad(int u, int v) {
     checkId(u);
     checkId(v);
@@ -137,7 +137,7 @@ const Node& Graph::node(int id) const {
     return nodes_[static_cast<std::size_t>(id)];
 }
 
-// O(1) average: one HashTable lookup.
+// hash table lookup, -1 if name not found
 int Graph::findNode(const std::string& name) const {
     int id = -1;
     return nameIndex_.find(name, id) ? id : -1;

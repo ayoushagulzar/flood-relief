@@ -1,6 +1,5 @@
-// text.h - one font family (Poppins, OFL licence) in three sizes, plus small
-// drawing helpers used by every panel: text, uppercase labels, wrapping, icons.
-#pragma once
+// this file declares the fonts (Poppins) and small drawing helpers used in every panel
+#pragma once // this prevents multiple inclusions of the header file.
 
 #include <string>
 
@@ -10,11 +9,10 @@
 
 enum class Weight { Regular, SemiBold };
 
+// loads the fonts in 3 sizes and 2 weights
 class Fonts {
 public:
-    // Loads assets/fonts/Poppins-*.ttf at 16 / 18 / 28 px. Falls back to
-    // raylib's built-in font if a file is missing (the app still runs).
-    void load();
+    void load(); // loads from assets/fonts, uses raylib's font if file is missing
     void unload();
     const Font& get(float size, Weight w) const;
 
@@ -24,38 +22,36 @@ private:
     bool loaded_ = false;
 };
 
+// drawing helpers
 namespace ui {
 
-void setFonts(const Fonts* fonts);  // called once by App
+void setFonts(const Fonts* fonts); // called once by App
 
-// Normal text. Top-left at pos.
+// normal text / small CAPITAL label / text that ends at rightX
 void text(const std::string& s, Vector2 pos, float size, Color c, Weight w = Weight::Regular);
-// Small UPPERCASE tag with a little letter spacing.
 void caps(const std::string& s, Vector2 pos, float size, Color c, Weight w = Weight::SemiBold);
-// Right-aligned: the text ENDS at rightX.
 void textRight(const std::string& s, float rightX, float y, float size, Color c, Weight w = Weight::Regular);
+// width of the text in pixels
 float measure(const std::string& s, float size, Weight w = Weight::Regular);
 float measureCaps(const std::string& s, float size, Weight w = Weight::SemiBold);
-// Cuts the text and adds "..." so it fits in maxWidth.
+// cuts long text and adds "..."
 std::string fit(const std::string& s, float maxWidth, float size, Weight w = Weight::Regular);
-// Splits s into lines no wider than maxWidth (breaks at spaces).
+// splits text into lines / draws wrapped text and returns its height
 DynamicArray<std::string> wrap(const std::string& s, float maxWidth, float size, Weight w = Weight::Regular);
-// Draws wrapped text; returns the height used.
 float paragraph(const std::string& s, Vector2 pos, float maxWidth, float size, Color c, float lineGap = 4);
 std::string upper(const std::string& s);
 
-// Hairline helpers.
+// thin lines
 void hline(float x1, float x2, float y, Color c);
 void vline(float x, float y1, float y2, Color c);
 
-// Rounded rectangles with the radius in PIXELS (raylib wants a 0..1 ratio).
+// rounded boxes (radius in pixels). card = white box with shadow and border
 void roundRect(Rectangle r, float radius, Color fill);
 void roundBorder(Rectangle r, float radius, Color line, float thick = 1);
-// Card = soft shadow + white fill + hairline border.
 void card(Rectangle r, float radius = 10);
 
-// Simple line icons drawn with raylib shapes (no image files needed).
+// icons drawn with lines (no image files)
 enum class Icon { Select, Block, Add, Next, All, Home, Map, List, Box, Help, Log, Drop, Search, Clock, Check, Road };
 void icon(Icon kind, Vector2 center, float size, Color c);
 
-}  // namespace ui
+}

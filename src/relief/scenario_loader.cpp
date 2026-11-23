@@ -1,16 +1,17 @@
-// scenario_loader.cpp - text file -> ReliefManager.
-// How errors work: any helper can call fail("message"). That throws a LoadError,
-// which loadText() catches ONCE and turns into "file:line: message", so the
-// parse functions never deal with line numbers themselves.
+// this file has the code of ScenarioLoader.
+// any helper can call fail("msg"), it throws a LoadError and loadText() catches it
+// and adds the file name + line number to the message
 #include "relief/scenario_loader.h"
 
-#include <cctype>
-#include <fstream>
-#include <sstream>
+#include <cctype> // isspace, tolower
+#include <fstream> // reading the file
+#include <sstream> // stringstream for splitting
 #include <stdexcept>
 
+// anonymous namespace -> these helpers can only be used inside this file
 namespace {
 
+// removes spaces from start and end
 std::string trim(const std::string& s) {
     std::size_t a = 0, b = s.size();
     while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
@@ -18,13 +19,14 @@ std::string trim(const std::string& s) {
     return s.substr(a, b - a);
 }
 
+// makes text lowercase so "City" and "city" both work
 std::string lower(const std::string& s) {
     std::string out;
     for (char c : s) out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     return out;
 }
 
-// Splits "a, b ,c" into trimmed fields.
+// "a, b ,c" -> ["a", "b", "c"]
 DynamicArray<std::string> splitFields(const std::string& line) {
     DynamicArray<std::string> out;
     std::stringstream ss(line);
@@ -33,13 +35,15 @@ DynamicArray<std::string> splitFields(const std::string& line) {
     return out;
 }
 
-// Thrown inside the loader; caught once and turned into "file:line: message".
+// our own error type
 struct LoadError {
     std::string message;
 };
 
+// [[noreturn]] -> this function never returns (it always throws)
 [[noreturn]] void fail(const std::string& msg) { throw LoadError{msg}; }
 
+// text -> double. "27.7abc" is not accepted (used != size means extra junk)
 double toDouble(const std::string& s, const char* what) {
     try {
         std::size_t used = 0;
@@ -51,6 +55,7 @@ double toDouble(const std::string& s, const char* what) {
     }
 }
 
+// text -> int, same as above
 int toInt(const std::string& s, const char* what) {
     try {
         std::size_t used = 0;
@@ -62,12 +67,14 @@ int toInt(const std::string& s, const char* what) {
     }
 }
 
+// place name -> id, error if the name is unknown
 int place(const ReliefManager& m, const std::string& name, const char* section) {
     int id = m.graph().findNode(name);
     if (id < 0) fail("unknown place '" + name + "' in " + section);
     return id;
 }
 
+// checks no. of fields and that none is empty
 void needFields(const DynamicArray<std::string>& f, std::size_t min, std::size_t max, const char* section,
                 const char* format) {
     if (f.size() < min || f.size() > max)
@@ -77,8 +84,10 @@ void needFields(const DynamicArray<std::string>& f, std::size_t min, std::size_t
         if (f[i].empty()) fail(std::string("empty field ") + std::to_string(i + 1) + " in " + section);
 }
 
+// which section we are reading now
 enum class Section { None, Nodes, Roads, Stock, Requests };
 
+// [NODES]  name, type, lat, lon
 void parseNode(const DynamicArray<std::string>& f, ReliefManager& m) {
     needFields(f, 4, 4, "[NODES]", "name, type, lat, lon");
     std::string t = lower(f[1]);
@@ -92,9 +101,10 @@ void parseNode(const DynamicArray<std::string>& f, ReliefManager& m) {
     double lon = toDouble(f[3], "lon");
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) fail("coordinates out of range for '" + f[0] + "'");
     int id = m.graph().addNode(f[0], type, lat, lon);
-    if (type == NodeType::Depot) m.addDepot(id);
+    if (type == NodeType::Depot) m.addDepot(id); // depots also need a stock entry
 }
 
+// [ROADS]  from, to, minutes, type, name, condition (optional)
 void parseRoad(const DynamicArray<std::string>& f, ReliefManager& m) {
     needFields(f, 5, 6, "[ROADS]", "from, to, minutes, type, name [, condition]");
     int u = place(m, f[0], "[ROADS]");
@@ -109,7 +119,7 @@ void parseRoad(const DynamicArray<std::string>& f, ReliefManager& m) {
     else if (t == "road") type = RoadType::Road;
     else fail("unknown road type '" + f[3] + "' (use motorway, highway or road)");
     if (m.graph().hasRoad(u, v)) fail("duplicate road '" + f[0] + "' - '" + f[1] + "'");
-    m.graph().addRoad(u, v, minutes, type, f[4] == "-" ? "" : f[4]);  // "-" = unnamed
+    m.graph().addRoad(u, v, minutes, type, f[4] == "-" ? "" : f[4]); // "-" means road has no name
     if (f.size() == 6) {
         std::string c = lower(f[5]);
         if (c == "clear") {
@@ -120,6 +130,7 @@ void parseRoad(const DynamicArray<std::string>& f, ReliefManager& m) {
     }
 }
 
+// [STOCK]  depot, supply, quantity
 void parseStock(const DynamicArray<std::string>& f, ReliefManager& m) {
     needFields(f, 3, 3, "[STOCK]", "depot, supply, quantity");
     int id = place(m, f[0], "[STOCK]");
@@ -131,6 +142,7 @@ void parseStock(const DynamicArray<std::string>& f, ReliefManager& m) {
     m.addStock(id, s, q);
 }
 
+// [REQUESTS]  id, location, supply, quantity, urgency, people, vulnerable
 void parseRequest(const DynamicArray<std::string>& f, ReliefManager& m) {
     needFields(f, 7, 7, "[REQUESTS]", "id, location, supply, quantity, urgency, people, vulnerable");
     Request r;
@@ -151,8 +163,10 @@ void parseRequest(const DynamicArray<std::string>& f, ReliefManager& m) {
     m.addRequest(r);
 }
 
-}  // namespace
+}
 
+// reads line by line. a [SECTION] line changes the section,
+// other lines go to the parse function of the current section
 LoadResult ScenarioLoader::loadText(const std::string& text, const std::string& name, ReliefManager& m) {
     LoadResult res;
     std::istringstream in(text);
@@ -162,7 +176,7 @@ LoadResult ScenarioLoader::loadText(const std::string& text, const std::string& 
     try {
         while (std::getline(in, raw)) {
             ++lineNo;
-            std::size_t hash = raw.find('#');
+            std::size_t hash = raw.find('#'); // remove comment part
             std::string line = trim(hash == std::string::npos ? raw : raw.substr(0, hash));
             if (line.empty()) continue;
             if (line.front() == '[') {
@@ -183,10 +197,10 @@ LoadResult ScenarioLoader::loadText(const std::string& text, const std::string& 
                 case Section::Requests: parseRequest(f, m); ++res.requests; break;
             }
         }
-    } catch (const LoadError& e) {
+    } catch (const LoadError& e) { // our own errors
         res.error = name + ":" + std::to_string(lineNo) + ": " + e.message;
         return res;
-    } catch (const std::exception& e) {  // something the manager/graph refused
+    } catch (const std::exception& e) { // errors thrown by graph / manager
         res.error = name + ":" + std::to_string(lineNo) + ": " + e.what();
         return res;
     }
@@ -198,6 +212,7 @@ LoadResult ScenarioLoader::loadText(const std::string& text, const std::string& 
     return res;
 }
 
+// reads the whole file into a string and gives it to loadText()
 LoadResult ScenarioLoader::loadFile(const std::string& path, ReliefManager& m) {
     std::ifstream file(path);
     if (!file) {
@@ -209,6 +224,6 @@ LoadResult ScenarioLoader::loadFile(const std::string& path, ReliefManager& m) {
     buffer << file.rdbuf();
     std::string name = path;
     std::size_t slash = name.find_last_of("/\\");
-    if (slash != std::string::npos) name = name.substr(slash + 1);
+    if (slash != std::string::npos) name = name.substr(slash + 1); // keep only the file name for errors
     return loadText(buffer.str(), name, m);
 }

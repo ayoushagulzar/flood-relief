@@ -1,19 +1,11 @@
-// relief_manager.h - the brain. The CLI and the GUI only ever call this class.
+// this file declares ReliefManager -> the main logic of the project.
+// the CLI and GUI only call this class, they don't have any relief logic themselves.
 //
-// Data structures in use:
-//   MinHeap<HeapItem, HigherPriorityFirst>  -> which request goes next
-//   HashTable                               -> request id ("R-07") -> index
-//   Graph + Dijkstra                        -> routes and travel times
-//   DynamicArray                            -> requests, depots, events, deferred list
-//
-// Priority with aging (prevents starvation):
-//   base = urgency * 100 + people / 100 + (vulnerable ? 50 : 0)
-//   priority(now) = base + k * (now - arrival)
-//   k * now is the same for every request, so the heap can use the FIXED key
-//   key = base - k * arrival   (higher key first, ties -> earlier arrival).
-//
-// No cout in here: the manager reports through return values and events().
-#pragma once
+// priority of a request:
+//   base = urgency * 100 + people / 100 + 50 (if vulnerable)
+//   key  = base - 2 * arrivalTime   (aging, so old requests don't wait forever)
+
+#pragma once // this prevents multiple inclusions of the header file.
 
 #include <cstddef>
 #include <string>
@@ -26,37 +18,34 @@
 
 class ReliefManager {
 public:
-    static constexpr double kAgingPerMinute = 2.0;
-    static constexpr int kDispatchMinutes = 10;  // clock advance per processNext()
+    static constexpr double kAgingPerMinute = 2.0; // k in the aging formula
+    static constexpr int kDispatchMinutes = 10;    // clock moves 10 min after each decision
 
     ReliefManager() = default;
+    // no copying allowed
     ReliefManager(const ReliefManager&) = delete;
     ReliefManager& operator=(const ReliefManager&) = delete;
 
-    // ---------- setup (used by the scenario loader) ----------
+    // ==================== setup ====================
     Graph& graph() { return graph_; }
     const Graph& graph() const { return graph_; }
 
-    // Registers a depot at a node of type Depot (or returns the existing one).
-    // Throws std::invalid_argument if the node is not a depot.
-    int addDepot(int nodeId);
+    int addDepot(int nodeId);          // throws if the node is not a depot
+    void addRequest(const Request& r); // checks the request then pushes it in the heap
 
-    // Adds a request. Throws std::invalid_argument on a duplicate id, invalid
-    // location, quantity <= 0 or urgency outside 1..5. arrivalTime is set to now().
-    void addRequest(const Request& r);
-
-    // ---------- actions ----------
-    Decision processNext();   // most urgent request -> greedy nearest depots; clock += 10 min
-    int processAll();         // processNext() until the queue is empty; returns how many
+    // ==================== actions ====================
+    Decision processNext(); // serves the most urgent request
+    int processAll();       // serves all requests in the heap
     bool hasPending() const { return !queue_.isEmpty(); }
 
+    // world changes (each one retries the deferred requests)
     bool blockRoad(int u, int v);
     bool reopenRoad(int u, int v);
     bool setRoadCondition(int u, int v, RoadCondition c);
     void addStock(int depotNodeId, Supply s, int quantity);
     void advanceTime(int minutes);
 
-    // ---------- read-only views ----------
+    // ==================== getters (read only) ====================
     const DynamicArray<Request>& requests() const { return requests_; }
     const DynamicArray<Depot>& depots() const { return depots_; }
     const DynamicArray<Event>& events() const { return events_; }
@@ -64,25 +53,24 @@ public:
     Stats stats() const;
     int now() const { return now_; }
     std::size_t deferredCount() const { return deferred_.size(); }
-    // The request heap exactly as stored (array order, index 0 = next to serve),
-    // as indices into requests(). O(n). For the CLI `queue` view.
-    DynamicArray<int> queueSnapshot() const;
-    // Indices of requests waiting for a retry (not in the heap).
+    DynamicArray<int> queueSnapshot() const; // heap array as it is stored (for the "queue" command)
     const DynamicArray<int>& deferredList() const { return deferred_; }
 
-    const Request* findRequest(const std::string& id) const;
+    const Request* findRequest(const std::string& id) const; // nullptr if not found
     const Depot* findDepot(int nodeId) const;
 
-    // base score and heap key (public so tests and the GUI can show them)
+    // public so tests and GUI can show them
     static double baseScore(const Request& r);
     static double heapKey(const Request& r);
 
 private:
+    // what we store in the heap
     struct HeapItem {
         double key;
         int arrival;
-        int index;  // into requests_
+        int index; // index in requests_
     };
+    // comparator -> higher key first, if same key then who came first
     struct HigherPriorityFirst {
         bool operator()(const HeapItem& a, const HeapItem& b) const {
             if (a.key != b.key) return a.key > b.key;
@@ -103,11 +91,11 @@ private:
     DynamicArray<Request> requests_;
     DynamicArray<Depot> depots_;
     DynamicArray<Event> events_;
-    DynamicArray<int> deferred_;  // indices of requests waiting for a retry
-    HashTable requestIndex_;      // "R-07" -> index into requests_
-    MinHeap<HeapItem, HigherPriorityFirst> queue_;
+    DynamicArray<int> deferred_;     // requests waiting for a retry (not in the heap)
+    HashTable requestIndex_;         // "R-07" -> index in requests_
+    MinHeap<HeapItem, HigherPriorityFirst> queue_; // priority queue of requests
     Decision lastDecision_;
-    int now_ = 0;
+    int now_ = 0;                    // clock in minutes
     // for stats
     double totalRouteMinutes_ = 0.0;
     long long totalWaitMinutes_ = 0;

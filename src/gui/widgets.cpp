@@ -1,4 +1,4 @@
-// widgets.cpp - button, nav item, cycler, stepper, toggle, tooltip.
+// this file has the code of my small widgets (button, nav item, cycler, stepper, toggle, tooltip)
 #include "gui/widgets.h"
 
 #include "gui/theme.h"
@@ -8,16 +8,15 @@ using namespace theme;
 namespace ui {
 
 namespace {
-constexpr float kButtonRadius = 9;
+constexpr float kButtonRadius = 9; // round corners of buttons
 }
 
 bool hovered(Rectangle r) { return CheckCollisionPointRec(GetMousePosition(), r); }
 
-// "Released inside" (not "pressed"): the normal desktop feel. You can
-// press, change your mind, move away and let go without clicking.
+// click = mouse RELEASED inside (like normal desktop apps)
 bool clickedIn(Rectangle r) { return hovered(r) && IsMouseButtonReleased(MOUSE_BUTTON_LEFT); }
 
-// Shared by button() and iconButton(): draws the box, returns the text colour.
+// draws the button box and returns the text colour (normal / hover / pressed / disabled)
 static Color buttonBox(Rectangle r, bool primary, bool enabled, bool active) {
     bool hot = enabled && hovered(r);
     bool down = hot && IsMouseButtonDown(MOUSE_BUTTON_LEFT);
@@ -33,6 +32,7 @@ static Color buttonBox(Rectangle r, bool primary, bool enabled, bool active) {
     return active ? kAccent : kText;
 }
 
+// returns true when clicked
 bool button(Rectangle r, const std::string& label, bool primary, bool enabled, bool active) {
     Color fg = buttonBox(r, primary, enabled, active);
     Weight w = primary || active ? Weight::SemiBold : Weight::Regular;
@@ -41,6 +41,7 @@ bool button(Rectangle r, const std::string& label, bool primary, bool enabled, b
     return enabled && clickedIn(r);
 }
 
+// button with an icon
 bool iconButton(Rectangle r, Icon kind, const std::string& label, bool primary, bool enabled, bool active) {
     Color fg = buttonBox(r, primary, enabled, active);
     Weight w = primary || active ? Weight::SemiBold : Weight::Regular;
@@ -51,6 +52,7 @@ bool iconButton(Rectangle r, Icon kind, const std::string& label, bool primary, 
     return enabled && clickedIn(r);
 }
 
+// sidebar row
 bool navItem(Rectangle r, Icon kind, const std::string& label, bool active) {
     bool hot = hovered(r);
     if (active) {
@@ -65,6 +67,7 @@ bool navItem(Rectangle r, Icon kind, const std::string& label, bool active) {
     return clickedIn(r);
 }
 
+// left half = previous, right half = next (wraps around)
 bool cycler(Rectangle r, const char* const* options, int count, int& index) {
     roundRect(r, kButtonRadius, kCard);
     roundBorder(r, kButtonRadius, kRule);
@@ -88,6 +91,7 @@ bool cycler(Rectangle r, const char* const* options, int count, int& index) {
     return changed;
 }
 
+// - and + buttons, value stays between lo and hi
 bool stepper(Rectangle r, int& value, int step, int lo, int hi) {
     roundRect(r, kButtonRadius, kCard);
     roundBorder(r, kButtonRadius, kRule);
@@ -109,6 +113,7 @@ bool stepper(Rectangle r, int& value, int step, int lo, int hi) {
     return value != before;
 }
 
+// check box, click flips value
 bool toggle(Rectangle r, const std::string& label, bool& value) {
     Rectangle box{r.x, r.y + (r.height - 20) / 2, 20, 20};
     if (value) {
@@ -126,6 +131,7 @@ bool toggle(Rectangle r, const std::string& label, bool& value) {
     return false;
 }
 
+// dark label, moved left if it goes off the screen
 void tooltip(const std::string& s, Vector2 at) {
     float w = measure(s, kSmall) + 18;
     Rectangle r{at.x, at.y, w, 32};
@@ -134,4 +140,4 @@ void tooltip(const std::string& s, Vector2 at) {
     text(s, {r.x + 9, r.y + 8}, kSmall, kBackground);
 }
 
-}  // namespace ui
+}

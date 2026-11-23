@@ -1,4 +1,4 @@
-// basemap.cpp - OSM tile cache, downloads and drawing.
+// this file has the code of Basemap (tile cache, downloads and drawing the tiles)
 #include "gui/basemap.h"
 
 #include <cmath>
@@ -7,15 +7,12 @@
 
 namespace {
 
-constexpr int kMaxDownloadsPerFrame = 2;
+constexpr int kMaxDownloadsPerFrame = 2; // limits so the window never lags
 constexpr int kMaxLoadsPerFrame = 2;
-constexpr int kMaxPendingDownloads = 6;  // OSM policy: be gentle with their servers
+constexpr int kMaxPendingDownloads = 6;
 
-// OSM tiles are colourful. This shader turns them into a pale, almost
-// grey map so our burgundy roads and symbols stand out on top:
-//   1. mostly grey: mix the colour with its own brightness (luminance)
-//   2. lighter: mix the result with near-white by `fade`
-// Water stays a little darker than land, so the coast is still visible.
+// shader (small program that runs on the GPU) that makes the OSM tiles grey and pale
+// so our roads and symbols are easier to see
 const char* kFadeFragment = R"(#version 330
 in vec2 fragTexCoord;
 in vec4 fragColor;
@@ -32,12 +29,14 @@ void main() {
 }
 )";
 
-}  // namespace
+}
 
+// OSM asks every app to send a User-Agent with its name
 Basemap::Basemap() : index_(256), downloader_("FloodRelief/1.0 (DSA student project; github.com/ayoushagulzar/flood-relief)") {}
 
 Basemap::~Basemap() = default;
 
+// shader can only be loaded after the window is open
 void Basemap::init() {
     fadeShader_ = LoadShaderFromMemory(nullptr, kFadeFragment);
     shaderOk_ = IsShaderValid(fadeShader_);
@@ -47,6 +46,7 @@ void Basemap::init() {
     }
 }
 
+// free every texture
 void Basemap::unload() {
     for (std::size_t i = 0; i < tiles_.size(); ++i) {
         if (tiles_[i].state == State::Loaded) UnloadTexture(tiles_[i].texture);
@@ -66,16 +66,15 @@ std::string Basemap::pathFor(int z, int x, int y) { return "cache/" + keyFor(z, 
 
 float Basemap::tileWorldSize(int z) { return 256.0f * std::pow(2.0f, static_cast<float>(kRefZoom - z)); }
 
+// camera zoom 1.0 = tile zoom 6, every x2 zoom = one more tile level
 int Basemap::tileZoomFor(float camZoom) const {
-    // camera zoom 1.0 = reference zoom 6; every doubling = one tile zoom level.
-    // Rounding up (with a small bias) picks the sharper tile set: the start
-    // view (camera zoom ~0.65) uses zoom 6 tiles, as planned.
     int z = static_cast<int>(std::ceil(kRefZoom + std::log2(camZoom) - 0.25f));
     if (z < kMinTileZoom) z = kMinTileZoom;
     if (z > kMaxTileZoom) z = kMaxTileZoom;
     return z;
 }
 
+// finished downloads -> mark the tile as on disk or failed
 void Basemap::collectDownloads() {
     net::DownloadResult r;
     while (downloader_.popResult(r)) {
@@ -85,6 +84,8 @@ void Basemap::collectDownloads() {
     }
 }
 
+// looks up "z/x/y" in the hash table. new tile -> add it and download it if it's not in cache.
+// if the png is on disk, load it as a texture
 int Basemap::ensure(int z, int x, int y, int& downloadsLeft) {
     std::string key = keyFor(z, x, y);
     int i = -1;
@@ -117,32 +118,31 @@ int Basemap::ensure(int z, int x, int y, int& downloadsLeft) {
             t.state = State::Loaded;
             ++loaded_;
         } else {
-            t.state = State::Failed;  // corrupt file: keep the map usable
+            t.state = State::Failed;
         }
     }
     return i;
 }
 
-// Draws tile (z,x,y) using the texture of tile (fromZ,fromX,fromY), which is
-// either the same tile or one of its parents (then only a part of it).
+// draws tile z/x/y using the texture of the same tile or a part of its parent
 bool Basemap::drawTile(int z, int x, int y, int fromZ, int fromX, int fromY) {
     int i = -1;
     if (!index_.find(keyFor(fromZ, fromX, fromY), i)) return false;
     const Tile& t = tiles_[static_cast<std::size_t>(i)];
     if (t.state != State::Loaded) return false;
 
-    int levels = z - fromZ;          // 0 = same tile, 1 = parent ...
+    int levels = z - fromZ;
     float part = 256.0f / static_cast<float>(1 << levels);
     float sx = static_cast<float>(x - (fromX << levels)) * part;
     float sy = static_cast<float>(y - (fromY << levels)) * part;
     float ws = tileWorldSize(z);
     Rectangle src{sx, sy, part, part};
-    // +0.5 world unit overlap hides hairline seams between tiles
     Rectangle dst{static_cast<float>(x) * ws, static_cast<float>(y) * ws, ws + 0.5f, ws + 0.5f};
     DrawTexturePro(t.texture, src, dst, {0, 0}, 0, WHITE);
     return true;
 }
 
+// draws all tiles the camera can see. if a tile is missing we draw its parent (blurry but no hole)
 void Basemap::draw(const Camera2D& cam, Rectangle mapRect) {
     loadsThisFrame_ = 0;
     collectDownloads();
@@ -161,17 +161,16 @@ void Basemap::draw(const Camera2D& cam, Rectangle mapRect) {
 
     if (shaderOk_) BeginShaderMode(fadeShader_);
     int downloadsLeft = kMaxDownloadsPerFrame;
-    // Centre tiles first, so the part you look at arrives first.
     int cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     int radius = (x1 - x0 > y1 - y0 ? x1 - x0 : y1 - y0) / 2 + 1;
     for (int r = 0; r <= radius; ++r) {
         for (int y = cy - r; y <= cy + r; ++y) {
             for (int x = cx - r; x <= cx + r; ++x) {
                 if (x < x0 || x > x1 || y < y0 || y > y1) continue;
-                if (std::abs(x - cx) != r && std::abs(y - cy) != r) continue;  // ring only
+                if (std::abs(x - cx) != r && std::abs(y - cy) != r) continue;
                 ensure(z, x, y, downloadsLeft);
                 if (drawTile(z, x, y, z, x, y)) continue;
-                for (int up = 1; up <= 3 && z - up >= 0; ++up) {  // parent fallback
+                for (int up = 1; up <= 3 && z - up >= 0; ++up) {
                     if (drawTile(z, x, y, z - up, x >> up, y >> up)) break;
                 }
             }

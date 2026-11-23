@@ -1,4 +1,4 @@
-// Tests for MinHeap<T, Compare>.
+// tests for MinHeap
 #include <cstdlib>
 #include <string>
 
@@ -7,11 +7,12 @@
 
 namespace {
 
+// makes it a max heap (bigger first)
 struct Greater {
     bool operator()(int a, int b) const { return a > b; }
 };
 
-// A tiny item type with a custom comparator, like the relief requests later.
+// small struct to test a custom comparator
 struct Job {
     std::string name;
     int score;
@@ -33,6 +34,7 @@ void basicPushPopOrder() {
     CHECK_EQ(h.top(), 5);
 }
 
+// 1000 random numbers should come out sorted
 void thousandRandomComeOutSorted() {
     MinHeap<int> h;
     std::srand(42);
@@ -61,6 +63,7 @@ void duplicates() {
     CHECK(h.isEmpty());
 }
 
+// with Greater the biggest number comes first
 void maxHeapWithComparator() {
     MinHeap<int, Greater> h;
     for (int x : {4, 9, 1, 7, 3})
@@ -79,6 +82,7 @@ void structWithComparator() {
     CHECK(h.pop().name == "medicine");
 }
 
+// pop / top on empty heap should throw
 void emptyThrows() {
     MinHeap<int> h;
     CHECK_THROWS_AS(h.pop(), std::out_of_range);
@@ -98,6 +102,7 @@ void clearEmpties() {
     CHECK_EQ(h.top(), 5);
 }
 
+// push 10..1 so every item has to move up
 void descendingPushSiftUp() {
     MinHeap<int> h;
     for (int i = 10; i >= 1; --i)
@@ -108,8 +113,9 @@ void descendingPushSiftUp() {
     }
     CHECK(h.isEmpty());
 }
-} // namespace
+}
 
+// called from test_main.cpp
 void runMinHeapTests() {
     test::section("MinHeap");
     test::runCase("basicPushPopOrder", basicPushPopOrder);

@@ -1,4 +1,4 @@
-// Tests for ScenarioLoader: good files load, broken files give exact errors.
+// tests for ScenarioLoader
 #include <string>
 
 #include "relief/scenario_loader.h"
@@ -6,6 +6,7 @@
 
 namespace {
 
+// a small correct file. R"( )" is a raw string so new lines stay as they are
 const char* kGood = R"(
 # a tiny scenario
 [NODES]
@@ -28,18 +29,20 @@ bool contains(const std::string& text, const std::string& part) {
     return text.find(part) != std::string::npos;
 }
 
+// loads text into a new manager and returns the result
 LoadResult loadBroken(const std::string& text) {
     ReliefManager m;
     return ScenarioLoader::loadText(text, "test.txt", m);
 }
 
+// everything in kGood should load correctly
 void goodFileLoads() {
     ReliefManager m;
     LoadResult r = ScenarioLoader::loadText(kGood, "good.txt", m);
     CHECK(r.ok);
     CHECK(r.error.empty());
     if (!r.ok)
-        return; // nothing else can work if loading failed
+        return;
     CHECK_EQ(r.nodes, 3);
     CHECK_EQ(r.roads, 2);
     CHECK_EQ(r.requests, 1);
@@ -51,7 +54,7 @@ void goodFileLoads() {
     const Edge* flooded = m.graph().edgeBetween(sukkur, camp);
     const Edge* local = m.graph().edgeBetween(depot, sukkur);
     CHECK(flooded != nullptr && flooded->condition == RoadCondition::Flooded);
-    CHECK(local != nullptr && local->roadName.empty()); // "-" = unnamed
+    CHECK(local != nullptr && local->roadName.empty());
     const Request* req = m.findRequest("R-01");
     CHECK(req != nullptr);
     CHECK(req != nullptr && req->vulnerable);
@@ -60,6 +63,7 @@ void goodFileLoads() {
     CHECK_EQ(d.legs.at(0).minutes, 10.0 + 180.0 * 2.5);
 }
 
+// typo in place name -> error with line no.
 void unknownPlaceHasLineNumber() {
     LoadResult r =
         loadBroken("[NODES]\nSukkur, city, 27.7, 68.8\n[ROADS]\nSukkur, Sukur, 10, road, x\n");
@@ -117,18 +121,24 @@ void emptyFile() {
     CHECK(contains(r.error, "no [NODES]"));
 }
 
+// missing file should give an error, not crash
 void missingFile() {
     ReliefManager m;
     LoadResult r = ScenarioLoader::loadFile("does/not/exist.txt", m);
     CHECK(!r.ok);
-    CHECK(!r.error.empty()); // any clear error is fine (wording differs on Windows)
+    CHECK(!r.error.empty());
 }
 
-// TODO (you): one test of your own. Idea: data before any section header,
-// e.g. "Sukkur, city, 1, 1" on line 1 -> "test.txt:1: data before any [SECTION]".
+// data line before any [SECTION] -> error on line 1
+void dataBeforeSection() {
+    LoadResult r = loadBroken("Sukkur, city, 1, 1\n");
+    CHECK(!r.ok);
+    CHECK(contains(r.error, "test.txt:1: data before any [SECTION]"));
+}
 
-} // namespace
+}
 
+// called from test_main.cpp
 void runLoaderTests() {
     test::section("ScenarioLoader");
     test::runCase("goodFileLoads", goodFileLoads);
@@ -140,4 +150,5 @@ void runLoaderTests() {
     test::runCase("badValues", badValues);
     test::runCase("emptyFile", emptyFile);
     test::runCase("missingFile", missingFile);
+    test::runCase("dataBeforeSection", dataBeforeSection);
 }

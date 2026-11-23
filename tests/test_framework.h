@@ -1,28 +1,18 @@
-// TestFramework.h - a tiny test framework (no external libraries).
-//
-// How it works:
-//   CHECK(cond)         -> if cond is false, print file:line and the condition, count a failure.
-//   CHECK_THROWS(expr)  -> expr must throw an exception, otherwise it is a failure.
-//   CHECK_EQ(a, b)      -> like CHECK(a == b) but prints both values when they differ.
-//   runCase(name, fn)   -> runs one test case. If it throws (for example a TODO stub),
-//                          the case is reported as CRASHED and the next case still runs.
-//   testSummary()       -> prints "N passed, M failed" and returns the exit code for ctest
-//                          (0 = everything passed, 1 = something failed).
-//
-// Why macros and not functions? Only a macro can capture __FILE__, __LINE__ and the
-// source text of the condition (#cond), which makes failure messages useful.
-#pragma once
+// this file is my small test framework (no library needed).
+// CHECK(cond) -> fails if cond is false, CHECK_EQ(a, b) -> fails if a != b and prints both,
+// CHECK_THROWS(expr) -> fails if expr does not throw
+#pragma once // this prevents multiple inclusions of the header file.
 
 #include <exception>
 #include <iostream>
 
 namespace test {
 
-// "inline" lets these variables live in a header that several .cpp files include
-// without breaking the one-definition rule (C++17 feature).
+// inline -> lets these variables be in a header used by many .cpp files (C++17)
 inline int passed = 0;
 inline int failed = 0;
 
+// counts pass / fail and prints where it failed
 inline void report(bool ok, const char* expr, const char* file, int line) {
     if (ok) {
         ++passed;
@@ -32,7 +22,7 @@ inline void report(bool ok, const char* expr, const char* file, int line) {
     }
 }
 
-// Runs one named test case and survives exceptions thrown inside it.
+// runs one test, if it crashes with an exception we count it as failed and continue
 inline void runCase(const char* name, void (*fn)()) {
     try {
         fn();
@@ -45,17 +35,21 @@ inline void runCase(const char* name, void (*fn)()) {
     }
 }
 
+// prints a heading like [DynamicArray]
 inline void section(const char* title) { std::cout << "[" << title << "]\n"; }
 
+// prints the final result. returns 0 if all passed (ctest checks this)
 inline int testSummary() {
     std::cout << "\n" << passed << " passed, " << failed << " failed\n";
     return failed == 0 ? 0 : 1;
 }
 
-}  // namespace test end
+}
 
+// macros are used bcuz only a macro can get __FILE__, __LINE__ and the condition text
 #define CHECK(cond) test::report(static_cast<bool>(cond), #cond, __FILE__, __LINE__)
 
+// do { } while (0) makes the macro work like one statement
 #define CHECK_EQ(a, b)                                                                  \
     do {                                                                                \
         auto check_a_ = (a);                                                            \
@@ -76,9 +70,7 @@ inline int testSummary() {
         test::report(threw_, "throws: " #expr, __FILE__, __LINE__);      \
     } while (0)
 
-// Stricter: expr must throw exactly this exception type (or a subclass).
-// A TODO stub throws std::logic_error, so it will NOT accidentally pass
-// a CHECK_THROWS_AS(..., std::out_of_range).
+// same as CHECK_THROWS but the exception must be of this type
 #define CHECK_THROWS_AS(expr, ExceptionType)                                     \
     do {                                                                         \
         bool right_ = false;                                                     \

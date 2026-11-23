@@ -1,4 +1,5 @@
-// app.cpp - window, layout, map, tools, sidebar, top bar, search and KPIs.
+// this file has most of the App code: window, main loop, map tools, sidebar, top bar, search and KPI cards.
+// (right panel pages are in panels.cpp)
 #include "gui/app.h"
 
 #include <cctype>
@@ -10,27 +11,28 @@
 #include "gui/theme.h"
 #include "gui/widgets.h"
 
+// so we can write kText instead of theme::kText
 using namespace theme;
 
 namespace {
 
-constexpr float kNodePickPx = 10;  // how close (screen px) the mouse must be to a node
-constexpr float kRoadPickPx = 6;   // ... or to a road
-constexpr float kMapRadius = 14;   // map card corners
-constexpr int kMaxMatches = 6;     // search drop-down rows
+constexpr float kNodePickPx = 10; // how close the mouse must be to a place (pixels)
+constexpr float kRoadPickPx = 6; // same for roads
+constexpr float kMapRadius = 14;
+constexpr int kMaxMatches = 6; // max rows in the search list
 constexpr float kMatchRowH = 36;
 
+// road name or "Local road"
 std::string roadTitle(const Edge& e) { return e.roadName.empty() || e.roadName == "-" ? "Local road" : e.roadName; }
 
+// lowercase copy (search is not case sensitive)
 std::string lower(const std::string& s) {
     std::string out = s;
     for (char& ch : out) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
     return out;
 }
 
-// The map is drawn in a plain rectangle. To give it rounded corners we paint
-// the 4 corner "outsides" in the page colour: for each corner, a fan of thin
-// triangles between the corner point and the arc.
+// gives the map rounded corners by painting the 4 corners in the page colour
 void maskCorners(Rectangle r, float rad, Color bg) {
     const int steps = 8;
     struct Corner {
@@ -46,15 +48,15 @@ void maskCorners(Rectangle r, float rad, Color bg) {
             float a1 = (c.startDeg + 90.0f * static_cast<float>(i + 1) / steps) * DEG2RAD;
             Vector2 p0{c.centre.x + std::cos(a0) * rad, c.centre.y + std::sin(a0) * rad};
             Vector2 p1{c.centre.x + std::cos(a1) * rad, c.centre.y + std::sin(a1) * rad};
-            // both windings: raylib only draws counter-clockwise triangles
             DrawTriangle(c.point, p1, p0, bg);
             DrawTriangle(c.point, p0, p1, bg);
         }
     }
 }
 
-}  // namespace
+}
 
+// calculates where everything goes from the window size
 Layout App::computeLayout(float w, float h) {
     Layout l;
     l.sidebar = {0, 0, kSidebar, h};
@@ -64,19 +66,19 @@ Layout App::computeLayout(float w, float h) {
     l.header = {x0, kTopBar + 12, x1 - x0, 44};
     l.kpis = {x0, h - 16 - kKpiH, x1 - x0, kKpiH};
     float mapY = l.header.y + l.header.height + 8;
-    float mapBottom = l.kpis.y - 40;  // room for the "Today's highlights" title
+    float mapBottom = l.kpis.y - 40;
     l.map = {x0, mapY, x1 - x0, mapBottom - mapY};
     return l;
 }
 
+// opens the window, loads everything, then calls frame() 60 times a second
 int App::run() {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(kWindowW, kWindowH, "Flood Relief");
     SetWindowMinSize(1280, 720);
     SetTargetFPS(60);
-    MaximizeWindow();      // a dashboard: use the whole screen
-    SetExitKey(KEY_NULL);  // Esc cancels a tool instead of closing the window
-    // data/, assets/ and cache/ live next to the .exe (CMake copies them there)
+    MaximizeWindow();
+    SetExitKey(KEY_NULL);
     ChangeDirectory(GetApplicationDirectory());
 
     fonts_.load();
@@ -92,7 +94,7 @@ int App::run() {
     return 0;
 }
 
-// (Re)loads the scenario into a brand-new manager. Used at start and by Reset.
+// loads data/pakistan.txt into a NEW manager (also used by Reset)
 void App::loadScenario() {
     manager_ = std::make_unique<ReliefManager>();
     load_ = ScenarioLoader::loadFile(scenarioPath_, *manager_);
@@ -113,29 +115,27 @@ void App::loadScenario() {
     }
 }
 
+// one frame: input first, then draw everything
 void App::frame() {
     layout_ = computeLayout(static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight()));
     tooltip_.clear();
-    // Panels are drawn AFTER the map, so the map uses last frame's panel hover.
     lastPanelHover_ = panelHoverNode_;
     panelHoverNode_ = -1;
 
-    // Search first: while it has focus, the keyboard belongs to it.
     if (load_.ok) updateSearch();
 
-    // Panels first: if the mouse is on a panel (or on the info card or the
-    // search list over the map), the map ignores it. Checked ONCE per frame.
     Vector2 mouse = GetMousePosition();
     bool cardVisible = (selNode_ >= 0 || selU_ >= 0) && tool_ != Tool::AddRequest;
     Rectangle sr = searchRect();
     Rectangle dropDown{sr.x, sr.y, sr.width, sr.height + 8 + kMaxMatches * kMatchRowH};
+    // if the mouse is on a panel, the map should ignore it
     bool mouseOverUI = !CheckCollisionPointRec(mouse, layout_.map) ||
                        (cardVisible && CheckCollisionPointRec(mouse, infoCardRect())) ||
                        (searchFocus_ && CheckCollisionPointRec(mouse, dropDown));
     map_.update(layout_.map, mouseOverUI, !searchFocus_);
     if (load_.ok) updateMap(mouseOverUI);
 
-    // Keyboard shortcuts (everything also works with the mouse alone).
+    // keyboard shortcuts (not while typing in search)
     if (load_.ok && !searchFocus_) {
         if (IsKeyPressed(KEY_S)) setTool(Tool::Select);
         if (IsKeyPressed(KEY_B)) setTool(tool_ == Tool::BlockRoad ? Tool::Select : Tool::BlockRoad);
@@ -149,6 +149,7 @@ void App::frame() {
         }
     }
 
+    // draw everything
     BeginDrawing();
     ClearBackground(kBackground);
     drawMapCard();
@@ -157,25 +158,23 @@ void App::frame() {
     drawTopBar(layout_.topBar);
     drawSidebar(layout_.sidebar);
     if (load_.ok) drawRightPanel(layout_.rightPanel);
-    if (load_.ok) drawSearch();                                   // drop-down over everything
-    if (!tooltip_.empty()) ui::tooltip(tooltip_, tooltipPos_);  // last = on top of everything
+    if (load_.ok) drawSearch();
+    if (!tooltip_.empty()) ui::tooltip(tooltip_, tooltipPos_);
     EndDrawing();
 }
 
-// ---------------------------------------------------------------- map tools
-
+// changes the tool and clears selections that don't fit
 void App::setTool(Tool t) {
     tool_ = t;
     if (t == Tool::AddRequest) {
         form_.error.clear();
-        // If a city/shelter is already selected, start the form there.
         if (selNode_ >= 0 && manager_->graph().node(selNode_).type != NodeType::Depot) form_.locationId = selNode_;
     }
     if (t != Tool::Select) selU_ = selV_ = -1;
-    if (t == Tool::BlockRoad) selNode_ = -1;  // the road card replaces the place card
+    if (t == Tool::BlockRoad) selNode_ = -1;
 }
 
-// Hover picking every frame; click handling depends on the current tool.
+// finds what is under the mouse every frame, and handles a click
 void App::updateMap(bool mouseOverUI) {
     hoverNode_ = hoverU_ = hoverV_ = -1;
     if (mouseOverUI || map_.isDragging()) return;
@@ -195,6 +194,7 @@ void App::updateMap(bool mouseOverUI) {
     if (map_.clicked()) handleMapClick();
 }
 
+// what a click does depends on the tool: select / close or reopen road / pick place for new request
 void App::handleMapClick() {
     searchFocus_ = false;
     switch (tool_) {
@@ -207,7 +207,6 @@ void App::handleMapClick() {
             if (hoverU_ < 0) break;
             const Edge* e = manager_->graph().edgeBetween(hoverU_, hoverV_);
             if (!e) break;
-            // The manager logs the event and retries deferred requests itself.
             if (e->blocked) manager_->reopenRoad(hoverU_, hoverV_);
             else manager_->blockRoad(hoverU_, hoverV_);
             selU_ = hoverU_;
@@ -223,16 +222,18 @@ void App::handleMapClick() {
     }
 }
 
+// "Next" button -> serve one request
 void App::processNext() {
     if (!manager_->hasPending()) return;
     Decision d = manager_->processNext();
     if (!d.valid) return;
     pulseNode_ = manager_->requests()[static_cast<std::size_t>(d.requestIndex)].locationId;
     pulseStart_ = GetTime();
-    if (page_ != Page::Why) page_ = Page::Overview;  // Overview shows the decision tiles
+    if (page_ != Page::Why) page_ = Page::Overview;
     whyScroll_ = 0;
 }
 
+// "Serve all" button
 void App::processAll() {
     if (!manager_->hasPending()) return;
     manager_->processAll();
@@ -243,6 +244,7 @@ void App::processAll() {
     }
 }
 
+// what the map should highlight this frame
 void App::buildOverlay(MapOverlay& o) const {
     o.hoverNode = hoverNode_ >= 0 ? hoverNode_ : lastPanelHover_;
     o.hoverRoadU = hoverU_;
@@ -259,8 +261,7 @@ void App::buildOverlay(MapOverlay& o) const {
     o.pulseAge = static_cast<float>(GetTime() - pulseStart_);
 }
 
-// ---------------------------------------------------------------- map card
-
+// white card with the map in it
 void App::drawMapCard() {
     const Rectangle& m = layout_.map;
     ui::roundRect({m.x, m.y + 2, m.width, m.height}, kMapRadius, kShadow);
@@ -278,8 +279,7 @@ void App::drawMapCard() {
     ui::roundBorder(m, kMapRadius, kRule);
 }
 
-// The card grows with its content: a road, a depot (stock), or a place
-// with 0-3 requests.
+// size of the small info card (it grows with its content)
 Rectangle App::infoCardRect() const {
     const Rectangle& m = layout_.map;
     float h = 170;
@@ -296,6 +296,7 @@ Rectangle App::infoCardRect() const {
     return {m.x + m.width - 330 - 12, m.y + m.height - h - 44, 330, h};
 }
 
+// small card on the map about the selected place / road / depot
 void App::drawInfoCard() {
     if ((selNode_ < 0 && selU_ < 0) || tool_ == Tool::AddRequest) return;
     const Graph& g = manager_->graph();
@@ -367,8 +368,7 @@ void App::drawInfoCard() {
              {x, y}, kSmall, kFaint);
 }
 
-// ---------------------------------------------------------------- header + KPIs
-
+// scenario title + hint of what a click does
 void App::drawHeader(Rectangle r) {
     ui::text("Current scenario", {r.x, r.y}, kSmall, kMuted);
     std::string title = "Pakistan";
@@ -378,7 +378,6 @@ void App::drawHeader(Rectangle r) {
     }
     ui::text(title, {r.x, r.y + 19}, kBody, kText, Weight::SemiBold);
 
-    // Right side: what a click on the map does right now.
     std::string hint = "Drag to move · wheel to zoom · click a place or road";
     Color hc = kMuted;
     if (tool_ == Tool::BlockRoad) {
@@ -391,6 +390,7 @@ void App::drawHeader(Rectangle r) {
     ui::textRight(hint, r.x + r.width, r.y + 21, kSmall, hc, tool_ == Tool::Select ? Weight::Regular : Weight::SemiBold);
 }
 
+// 4 cards under the map: served, waiting, deferred, still needed
 void App::drawKpis(Rectangle r) {
     ui::text("Today's highlights", {r.x, r.y - 31}, kBody, kText, Weight::SemiBold);
     Stats s = manager_->stats();
@@ -400,7 +400,6 @@ void App::drawKpis(Rectangle r) {
         delivered += rq[i].delivered;
         needed += rq[i].remaining();
     }
-    // Deferred: list the ids (they are waiting for a road or stock).
     std::string deferredIds;
     const DynamicArray<int>& df = manager_->deferredList();
     for (std::size_t i = 0; i < df.size() && i < 3; ++i) {
@@ -430,8 +429,7 @@ void App::drawKpis(Rectangle r) {
     }
 }
 
-// ---------------------------------------------------------------- sidebar + top bar
-
+// left menu with the pages, shortcut keys and Reset button
 void App::drawSidebar(Rectangle r) {
     DrawRectangleRec(r, kBrand);
     Rectangle logo{r.x + 22, r.y + 20, 34, 34};
@@ -458,7 +456,6 @@ void App::drawSidebar(Rectangle r) {
         y += 48;
     }
 
-    // Keyboard keys, so they are easy to find during a demo.
     float ky = r.y + r.height - 262;
     ui::caps("Keys", {r.x + 22, ky}, kSmall, Color{160, 120, 128, 255});
     const char* keys[5][2] = {{"N", "next request"}, {"A", "serve all"}, {"B", "close road"}, {"R", "add request"},
@@ -472,7 +469,6 @@ void App::drawSidebar(Rectangle r) {
         ui::text(keys[i][1], {r.x + 54, yy}, kSmall, kSideText);
     }
 
-    // Scenario, clock and Reset at the bottom.
     float by = r.y + r.height - 92;
     ui::text("Pakistan monsoon 2022", {r.x + 22, by}, kSmall, kSideText);
     ui::text(formatClock(load_.ok ? manager_->now() : 0), {r.x + 22, by + 21}, kSmall, kBackground, Weight::SemiBold);
@@ -489,6 +485,7 @@ void App::drawSidebar(Rectangle r) {
     }
 }
 
+// search box, Next, Serve all and the tool buttons
 void App::drawTopBar(Rectangle r) {
     DrawRectangleRec(r, kBackground);
     ui::hline(r.x, r.x + r.width, r.y + r.height - 1, kRule);
@@ -502,15 +499,13 @@ void App::drawTopBar(Rectangle r) {
     } else {
         ui::text(ui::fit(searchText_, s.width - 48, kSmall), {s.x + 14, s.y + 11}, kSmall, kText);
     }
-    if (searchFocus_ && static_cast<int>(GetTime() * 2) % 2 == 0) {  // blinking cursor
+    if (searchFocus_ && static_cast<int>(GetTime() * 2) % 2 == 0) {
         float cx = s.x + 14 + (searchText_.empty() ? 0 : ui::measure(searchText_, kSmall)) + 1;
         DrawRectangleRec({cx, s.y + 11, 1.2f, 19}, kText);
     }
     ui::icon(ui::Icon::Search, {s.x + s.width - 20, s.y + s.height / 2}, 16, kMuted);
     if (ui::clickedIn(s)) searchFocus_ = true;
 
-    // Actions. Close road / Add request are tools: they stay "on" until
-    // clicked again or Esc. Next / Serve all act immediately.
     bool pending = manager_->hasPending();
     float x = s.x + s.width + 18, y = r.y + 13, h = 40;
     struct Btn {
@@ -539,7 +534,6 @@ void App::drawTopBar(Rectangle r) {
         x += btns[i].w + 10;
     }
 
-    // Right: the simulation clock.
     std::string clock = formatClock(manager_->now());
     float cw = ui::measure(clock, kBody, Weight::SemiBold);
     float cx = r.x + r.width - kRightPanel + kRightPanel - 22 - cw;
@@ -549,18 +543,15 @@ void App::drawTopBar(Rectangle r) {
     }
 }
 
-// ---------------------------------------------------------------- search
-//
-// Type part of a name: the drop-down lists matching places (linear scan,
-// 77 nodes, trivial). An EXACT name is found with Graph::findNode, which is
-// our HashTable lookup: O(1) on average.
-
+// ---- search ----
+// exact name is found with the hash table (findNode), others by checking every name
 Rectangle App::searchRect() const { return {layout_.topBar.x + 22, layout_.topBar.y + 13, 280, 40}; }
 
+// exact match first, then names that contain the text
 void App::findMatches(DynamicArray<int>& out) const {
     if (searchText_.empty()) return;
     const Graph& g = manager_->graph();
-    int exact = g.findNode(searchText_);  // HashTable: O(1)
+    int exact = g.findNode(searchText_);
     if (exact >= 0) out.pushBack(exact);
     std::string needle = lower(searchText_);
     for (std::size_t i = 0; i < g.nodeCount() && out.size() < kMaxMatches; ++i) {
@@ -570,6 +561,7 @@ void App::findMatches(DynamicArray<int>& out) const {
     }
 }
 
+// select a place and move the map to it
 void App::selectAndShow(int nodeId) {
     if (tool_ == Tool::AddRequest) form_.locationId = nodeId;
     else setTool(Tool::Select);
@@ -581,9 +573,9 @@ void App::selectAndShow(int nodeId) {
     searchText_.clear();
 }
 
+// typing in the search box (Esc clears, Enter goes to first match)
 void App::updateSearch() {
     if (!searchFocus_) return;
-    // GetCharPressed: one call per typed character (handles shift, layouts).
     for (int ch = GetCharPressed(); ch > 0; ch = GetCharPressed()) {
         if (ch >= 32 && ch < 127 && searchText_.size() < 40) searchText_ += static_cast<char>(ch);
     }
@@ -597,12 +589,12 @@ void App::updateSearch() {
         findMatches(m);
         if (!m.isEmpty()) selectAndShow(m[0]);
     }
-    // A click anywhere else closes the search.
     Rectangle s = searchRect();
     Rectangle dropDown{s.x, s.y, s.width, s.height + 8 + kMaxMatches * kMatchRowH};
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !ui::hovered(dropDown)) searchFocus_ = false;
 }
 
+// search box + drop down list
 void App::drawSearch() {
     if (!searchFocus_ || searchText_.empty()) return;
     DynamicArray<int> m;
